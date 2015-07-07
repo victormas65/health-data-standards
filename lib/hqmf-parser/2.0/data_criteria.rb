@@ -511,9 +511,21 @@ module HQMF2
       @code_list_id = reference.code_list_id if reference
     end
 
-    # Do the best we can with the variable name; currently, the actual name is not available in the HQMF
+    # Do the best we can with the variable name: the MAT is considering adding an encoded form of the variable
+    # name in the localVariableName field, if that's available use it; if not, fall back to the extension
     def patch_variable_name
-      @description = attr_val("./#{CRITERIA_GLOB}/cda:id/@extension") if @variable
+      return unless @variable
+      debugger
+      encoded_name = attr_val("./cda:localVariableName/@value")
+      if encoded_name && encoded_name.match(/^qdm_var_/)
+        # Strip out initial qdb_var_ string, trailing _*, and possible occurrence reference
+        encoded_name.gsub!(/^qdm_var_/, '')
+        encoded_name.gsub!(/_[^_]+$/, '')
+        encoded_name.gsub!(/Occurrence[A-Z]of/, '')
+        @description = encoded_name
+      else
+        @description = attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
+      end
     end
 
     # Patch variable flag and children_criteria for variables with subset ops
