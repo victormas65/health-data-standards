@@ -19,18 +19,11 @@ module HQMF2
       @hqmf_set_id = attr_val('cda:QualityMeasureDocument/cda:setId/@extension') || attr_val('cda:QualityMeasureDocument/cda:setId/@root').upcase
       @hqmf_version_number = attr_val('cda:QualityMeasureDocument/cda:versionNumber/@value').to_i
 
-      # measure_period_def = @doc.at_xpath('cda:QualityMeasureDocument/cda:controlVariable/cda:measurePeriod/cda:value', NAMESPACES)
-      # if measure_period_def
-      #   @measure_period = EffectiveTime.new(measure_period_def)
-      # end
-
-      #TODO -- figure out if this is the correct thing to do -- probably not.  Currently
-      # defaulting measure period to a period of 1 year from 2012 to 2013 this is overriden during
-      # calculation with correct year information .  Need to investigate parsing mp from meaures.
-      mp_low = HQMF::Value.new('TS',nil, '201201010000',nil, nil, nil)
-      mp_high = HQMF::Value.new('TS',nil,'201212312359',nil, nil, nil)
-      mp_width = HQMF::Value.new('PQ','a','1',nil, nil, nil)
-      @measure_period = HQMF::EffectiveTime.new(mp_low,mp_high,mp_width)
+      # overidden with correct year information later, but should be produce proper period
+      measure_period_def = @doc.at_xpath('cda:QualityMeasureDocument/cda:controlVariable/cda:measurePeriod/cda:value', NAMESPACES)
+      if measure_period_def
+        @measure_period = EffectiveTime.new(measure_period_def).to_model
+      end
 
       # Extract measure attributes
       # TODO: Review
@@ -66,11 +59,12 @@ module HQMF2
           @data_criteria_references[criteria.id] = criteria
         end
 
-        #handle_variable(criteria) if criteria.variable
+        handle_variable(criteria) if criteria.variable
         @data_criteria << criteria
       end
 
-      # Remove any data criteria from the main data criteria list that already has an equivalent member with a temporal reference (if it does not, then keep it)
+      # Remove any data criteria from the main data criteria list that already has a an equivalent member with a temporal reference (if it does not, then keep it)
+      # The goal of this is to remove any data criteria that should not be purely a source
       @data_criteria.reject! {|dc| !@data_criteria.detect{|dc2| dc.code_list_id == dc2.code_list_id && !dc2.temporal_references.empty?}.nil? && dc.temporal_references.empty?}
 
       # Patch descriptions for all data criteria and source data criteria
