@@ -7,8 +7,8 @@ module HQMF2
 
     attr_reader :measure_period, :id, :hqmf_set_id, :hqmf_version_number, :populations, :attributes, :source_data_criteria
 
-    # Create a new HQMF2::Document instance by parsing at file at the supplied path
-    # @param [String] path the path to the HQMF document
+    # Create a new HQMF2::Document instance by parsing the given HQMF contents
+    # @param [String] containing the HQMF contents to be parsed
     def initialize(hqmf_contents)
       @idgenerator = IdGenerator.new
       @doc = @entry = Document.parse(hqmf_contents)
@@ -53,7 +53,7 @@ module HQMF2
       @source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria)
 
       @doc.xpath('cda:QualityMeasureDocument/cda:component/cda:dataCriteriaSection/cda:entry', NAMESPACES).each do |entry|
-        @data_criteria << DataCriteria.new(entry, @data_criteria_references, @occurrences_map)
+        criteria = DataCriteria.new(entry, @data_criteria_references, @occurrences_map)
 
         # Sometimes there are multiple criteria with the same ID, even though they're different; in the HQMF
         # criteria refer to parent criteria via outboundRelationship, using an extension (aka ID) and a root;
@@ -62,16 +62,26 @@ module HQMF2
         # the code_list_id and we overwrite the parent with the code_list_id with a child with the same ID
         # without the code_list_id. As a temporary approach, we only overwrite a data criteria reference if
         # it doesn't have a code_list_id. As a longer term approach we may want to use the root for lookups.
-        # if criteria && (@data_criteria_references[criteria.id].nil? || @data_criteria_references[criteria.id].code_list_id.nil?)
-        #   @data_criteria_references[criteria.id] = criteria
-        # end
+        if criteria && (@data_criteria_references[criteria.id].nil? || @data_criteria_references[criteria.id].code_list_id.nil?)
+          @data_criteria_references[criteria.id] = criteria
+        end
 
         #handle_variable(criteria) if criteria.variable
+        @data_criteria << criteria
       end
 
+      # Remove any data criteria from the main data criteria list that already has an equivalent member with a temporal reference (if it does not, then keep it)
+      @data_criteria.reject! {|dc| !@data_criteria.detect{|dc2| dc.code_list_id == dc2.code_list_id && !dc2.temporal_references.empty?}.nil? && dc.temporal_references.empty?}
+
       # Patch descriptions for all data criteria and source data criteria
-      @data_criteria.each { |dc| dc.patch_descriptions(@data_criteria_references) }
-      @source_data_criteria.each { |sdc| sdc.patch_descriptions(@data_criteria_references) }
+
+
+
+
+      # @data_criteria.each { |dc| dc.patch_descriptions(@data_criteria_references) }
+      # @source_data_criteria.each { |sdc| sdc.patch_descriptions(@data_criteria_references) }
+
+
 
       # Detect missing specific occurrences and clone source data criteria
       #detect_missing_specifics
@@ -260,6 +270,7 @@ module HQMF2
       end
     end
 
+    # If a precondition references a population, remove it
     def remove_population_preconditions(doc)
       #population sections
       pop_ids = doc.xpath("//cda:populationCriteriaSection/cda:component[@typeCode='COMP']/*/cda:id",NAMESPACES)

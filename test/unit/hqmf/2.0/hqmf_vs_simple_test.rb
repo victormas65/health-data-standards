@@ -131,11 +131,16 @@ class HQMFVsSimpleTest < Minitest::Test
     hqmf_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "title"}}
     hqmf_populations = hqmf_model.instance_variable_get(:@populations)
 
-    # more restrictive (only checks DENEXCEP) removal of populations in simple_xml if simple_xml version has no preconditions and HQMF2 version does not have that population
-    if denexcep_index = simple_xml_model.instance_variable_get(:@population_criteria).index {|pc| pc.type=="DENEXCEP"} and simple_xml_model.instance_variable_get(:@population_criteria)[denexcep_index].preconditions.empty? and hqmf_populations.reject{ |pop| !pop.key?("DENEXCEP") }.empty?
-      simp_pop_crit = simple_xml_model.instance_variable_get(:@population_criteria)
-      simp_pop_crit.delete_at(denexcep_index)
-      #simple_xml_model.instance_variable_set(:@population_criteria, simp_pop_crit)
+    # More restrictive (only checks DENEXCEP) removal of populations in simple_xml 
+    # if simple_xml version has no preconditions
+    if denexcep_index = simple_xml_model.instance_variable_get(:@population_criteria).index {|pc| pc.type=="DENEXCEP"} and
+    # and no preconditions
+    simple_xml_model.instance_variable_get(:@population_criteria)[denexcep_index].preconditions.empty? and
+    # and HQMF2 version does not have that population
+    hqmf_populations.reject{ |pop| !pop.key?("DENEXCEP") }.empty?
+
+      # Then remove DENECEP from population  criteria and any population
+      simple_xml_model.instance_variable_get(:@population_criteria).delete_at(denexcep_index)
       simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "DENEXCEP"}}
     end
     # remove populations in simple_xml if simple_xml version has no preconditions and HQMF2 version does not have that population
@@ -159,6 +164,9 @@ class HQMFVsSimpleTest < Minitest::Test
       end
       if dc.definition == "laboratory_test"
         dc.instance_variable_set(:@title, "")
+        dc.instance_variable_set(:@description, "")
+      end
+      if dc.children_criteria and dc.children_criteria.length > 0
         dc.instance_variable_set(:@description, "")
       end
       dc.id = hash_criteria(dc, criteria_map)
