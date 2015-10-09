@@ -43,8 +43,7 @@ module HQMF2
       end
 
       # Extract the source data criteria from data criteria
-      @source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria)
-
+      @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria)
       @doc.xpath('cda:QualityMeasureDocument/cda:component/cda:dataCriteriaSection/cda:entry', NAMESPACES).each do |entry|
         criteria = DataCriteria.new(entry, @data_criteria_references, @occurrences_map)
 
@@ -58,7 +57,9 @@ module HQMF2
         if criteria && (@data_criteria_references[criteria.id].nil? || @data_criteria_references[criteria.id].code_list_id.nil?)
           @data_criteria_references[criteria.id] = criteria
         end
-
+        if collapsed_source_data_criteria.has_key?(criteria.id)
+          criteria.instance_variable_set(:@source_data_criteria, collapsed_source_data_criteria[criteria.id])
+        end
         handle_variable(criteria) if criteria.variable
         @data_criteria << criteria
       end
@@ -70,11 +71,8 @@ module HQMF2
       # Patch descriptions for all data criteria and source data criteria
 
 
-
-
       # @data_criteria.each { |dc| dc.patch_descriptions(@data_criteria_references) }
       # @source_data_criteria.each { |sdc| sdc.patch_descriptions(@data_criteria_references) }
-
 
 
       # Detect missing specific occurrences and clone source data criteria
