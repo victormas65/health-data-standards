@@ -124,7 +124,7 @@ class HQMFVsSimpleTest < Minitest::Test
   end
 
   def individual_measure_corrections(simple_xml_model, hqmf_model, measure_name)
-    to_remove_patient_expired_from = ["CMS124v4", "CMS125v4", "CMS126v4", "CMS127v4", "CMS128v4"]
+    to_remove_patient_expired_from = ["CMS123v4", "CMS124v4", "CMS125v4", "CMS126v4", "CMS127v4", "CMS128v4"]
     # removes the source data criteria for patient expired from simplexml, which at this time does not exist in the HQMF2.1 version or in the human readable version
     simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.309"} if to_remove_patient_expired_from.index(measure_name)
     # CMS127v4 seems to have stratifications, but neither the source data criteria or human readable show it should
@@ -168,8 +168,7 @@ class HQMFVsSimpleTest < Minitest::Test
   def remap_ids(measure_model)
 
     criteria_list = (measure_model.all_data_criteria + measure_model.source_data_criteria)
-    criteria_map = get_criteria_map(criteria_list)
-
+    criteria_map = get_criteria_map(measure_model.source_data_criteria, measure_model.all_data_criteria)
 
     # Normalize the HQMF model IDS
     criteria_list.each do |dc|
@@ -272,9 +271,13 @@ class HQMFVsSimpleTest < Minitest::Test
     dc.instance_variable_set(:@description, dc.description.strip)
   end
 
-  def get_criteria_map(criteria_list)
+  def get_criteria_map(source_data_criteria, data_criteria)
     criteria_map = {}
-    criteria_list.each do |dc|
+    # Since the dc has more specifics than the sdc, only use the sdc version if no dc version exists
+    source_data_criteria.each do |dc|
+      criteria_map[dc.id] = dc
+    end
+    data_criteria.each do |dc|
       criteria_map[dc.id] = dc
     end
     criteria_map
