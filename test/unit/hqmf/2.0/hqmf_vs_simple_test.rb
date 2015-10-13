@@ -126,8 +126,15 @@ class HQMFVsSimpleTest < Minitest::Test
     # to_remove_patient_expired_from = ["CMS75v4", "CMS82v4", "CMS123v4", "CMS124v4", "CMS125v4", "CMS126v4", "CMS127v4", "CMS128v4", "CMS130v4", "CMS131v4", "CMS134v4", "CMS139v4", "CMS158v4", "CMS164v4"]
     # removes the source data criteria for patient expired from simplexml, which at this time does not exist in the HQMF2.1 version or in the human readable version
     simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.309"} # if to_remove_patient_expired_from.index(measure_name)
-    # CMS127v4 seems to have stratifications, but neither the source data criteria or human readable show it should
-    hqmf_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "stratification" }} if measure_name == "CMS126v4" or measure_name == "CMS127v4"
+    # The "stratifications" property of populations either does not exist or is not being parsed in SimpleXML, or is superfluous in HQMF (they both contain "STRAT"s)
+    hqmf_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "stratification" }} #if measure_name == "CMS126v4" or measure_name == "CMS127v4"
+    # Birthdate is unnecessary on this measure according to human readable, only appear in SimpleXML
+    simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.definition == "patient_characteristic_birthdate"} if measure_name == "CMS149v4"
+    to_remove_birthdate_from = ["CMS82v3"]
+    # Remove base birthdate from data_criteria (as long as there is a temporal reference, then it is discluded in hqmf from data criteria)
+    if to_remove_birthdate_from.index(measure_name)
+      simple_xml_model.instance_variable_get(:@data_criteria).reject! {|dc| dc.definition == "patient_characteristic_birthdate" && simple_xml_model.data_criteria.detect{|dc2| dc.definition == dc2.definition && !dc2.temporal_references.empty?}.nil? && dc.temporal_references.empty?}
+    end
   end
 
   def remap_populations(simple_xml_model, hqmf_model)
