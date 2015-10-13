@@ -18,7 +18,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    if measure_name == "CMS128v4"
+    if measure_name == "CMS114v4"
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
@@ -123,9 +123,9 @@ class HQMFVsSimpleTest < Minitest::Test
   end
 
   def individual_measure_corrections(simple_xml_model, hqmf_model, measure_name)
-    to_remove_patient_expired_from = ["CMS123v4", "CMS124v4", "CMS125v4", "CMS126v4", "CMS127v4", "CMS128v4"]
+    # to_remove_patient_expired_from = ["CMS75v4", "CMS82v4", "CMS123v4", "CMS124v4", "CMS125v4", "CMS126v4", "CMS127v4", "CMS128v4", "CMS130v4", "CMS131v4", "CMS134v4", "CMS139v4", "CMS158v4", "CMS164v4"]
     # removes the source data criteria for patient expired from simplexml, which at this time does not exist in the HQMF2.1 version or in the human readable version
-    simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.309"} if to_remove_patient_expired_from.index(measure_name)
+    simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.309"} # if to_remove_patient_expired_from.index(measure_name)
     # CMS127v4 seems to have stratifications, but neither the source data criteria or human readable show it should
     hqmf_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "stratification" }} if measure_name == "CMS126v4" or measure_name == "CMS127v4"
   end
@@ -189,6 +189,13 @@ class HQMFVsSimpleTest < Minitest::Test
       if dc.children_criteria and dc.children_criteria.length > 0
         dc.instance_variable_set(:@description, "")
       end
+      # Changes specific occurence consts to a generalized naming pattern
+      # The goal is to reduce errors from arbitrary naming patterns that can
+      #   pop up
+      if dc.specific_occurrence && dc.specific_occurrence_const
+        dc.instance_variable_set(:@specific_occurrence_const, "Occurence #{dc.specific_occurrence}")
+      end
+
       dc.id = hash_criteria(dc, criteria_map)
       dc.instance_variable_set(:@source_data_criteria, dc.id)
       if dc.type == :derived

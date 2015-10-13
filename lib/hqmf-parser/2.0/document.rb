@@ -39,12 +39,11 @@ module HQMF2
       extracted_criteria = []
 
       @doc.xpath('cda:QualityMeasureDocument/cda:component/cda:dataCriteriaSection/cda:entry', NAMESPACES).each do |entry|
-        extracted_criteria << DataCriteria.new(entry)
+        extracted_criteria << entry
       end
-
       # Extract the source data criteria from data criteria
-      @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria)
-      @doc.xpath('cda:QualityMeasureDocument/cda:component/cda:dataCriteriaSection/cda:entry', NAMESPACES).each do |entry|
+      @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria, @occurrences_map)
+      extracted_criteria.each do |entry|
         criteria = DataCriteria.new(entry, @data_criteria_references, @occurrences_map)
 
         # Sometimes there are multiple criteria with the same ID, even though they're different; in the HQMF
