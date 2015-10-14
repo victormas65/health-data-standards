@@ -64,14 +64,14 @@ class HQMFVsSimpleTest < Minitest::Test
     #   clear_conjunctions_on_references(pc)
     # end
 
-    remap_ids(hqmf_model)
-    remap_ids(simple_xml_model)
-
     # modify both populations to reduce erroneous error reporting
     remap_populations(simple_xml_model, hqmf_model)
 
     # certain measures carry over currently unused by products
     individual_measure_corrections(simple_xml_model, hqmf_model, measure_name)
+
+    remap_ids(hqmf_model)
+    remap_ids(simple_xml_model)
 
     # empty out the measure period, since they are unlikely be equal
     simple_xml_model.instance_variable_set(:@measure_period, nil)
@@ -134,6 +134,11 @@ class HQMFVsSimpleTest < Minitest::Test
     # Remove base birthdate from data_criteria (as long as there is a temporal reference, then it is discluded in hqmf from data criteria)
     if to_remove_birthdate_from.index(measure_name)
       simple_xml_model.all_data_criteria.reject! {|dc| dc.definition == "patient_characteristic_birthdate" && (dc.temporal_references.nil? || dc.temporal_references.empty?)}
+    end
+    if measure_name == "CMS26v3"
+      field_values = hqmf_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.271"}.first.field_values
+      field_values["ORDINALITY"] = field_values["ORDINAL"]
+      field_values.delete("ORDINAL")
     end
   end
 
