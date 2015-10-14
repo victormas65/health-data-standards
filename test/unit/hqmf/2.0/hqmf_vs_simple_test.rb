@@ -18,11 +18,11 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    if measure_name == "CMS114v4"
+    # if measure_name == "CMS156v4" or measure_name == "CMS90v5" or measure_name == "CMS135v4"
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
-    end
+    # end
   end
 
   def do_roundtrip_test(measure_filename, measure_name)
@@ -133,7 +133,7 @@ class HQMFVsSimpleTest < Minitest::Test
     to_remove_birthdate_from = ["CMS82v3"]
     # Remove base birthdate from data_criteria (as long as there is a temporal reference, then it is discluded in hqmf from data criteria)
     if to_remove_birthdate_from.index(measure_name)
-      simple_xml_model.instance_variable_get(:@data_criteria).reject! {|dc| dc.definition == "patient_characteristic_birthdate" && simple_xml_model.data_criteria.detect{|dc2| dc.definition == dc2.definition && !dc2.temporal_references.empty?}.nil? && dc.temporal_references.empty?}
+      simple_xml_model.all_data_criteria.reject! {|dc| dc.definition == "patient_characteristic_birthdate" && (dc.temporal_references.nil? || dc.temporal_references.empty?)}
     end
   end
 
@@ -144,10 +144,10 @@ class HQMFVsSimpleTest < Minitest::Test
     hqmf_populations = hqmf_model.instance_variable_get(:@populations)
 
     # More restrictive (only checks DENEXCEP) removal of populations in simple_xml
-    # if simple_xml version has no preconditions
-    if denexceps = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=="DENEXCEP"} and
-    # and HQMF2 version does not have that population
-    hqmf_populations.reject{ |pop| !pop.key?("DENEXCEP") }.empty?
+    # HQMF2 version does not have that population
+    if hqmf_populations.reject{ |pop| !pop.key?("DENEXCEP") }.empty? and
+      # and obtain all denexceps (and only run if they exist)
+      denexceps = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=="DENEXCEP"}
 
       denexceps.each do |pc|
         if pc.preconditions.empty?
@@ -158,15 +158,18 @@ class HQMFVsSimpleTest < Minitest::Test
       end
     end
 
-    if denex_index = simple_xml_model.instance_variable_get(:@population_criteria).index {|pc| pc.type=="DENEX"} and
-    # and no preconditions
-    simple_xml_model.instance_variable_get(:@population_criteria)[denex_index].preconditions.empty? and
-    # HQMF2 version does not have that population
-    hqmf_populations.reject{ |pop| !pop.key?("DENEX") }.empty?
+    # if HQMF2 version does not have that population
+    if hqmf_populations.reject{ |pop| !pop.key?("DENEX") }.empty? and
+      # and obtain all denexcs (and only run if they exist)
+      denexs = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=="DENEX"}
 
-      # Then remove DENEXCEP from population criteria and any populations
-      simple_xml_model.instance_variable_get(:@population_criteria).delete_at(denex_index)
-      simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "DENEX"}}
+      denexs.each do |pc|
+        if pc.preconditions.empty?
+          # Then remove DENEXCEP from population  criteria and any population
+          simple_xml_model.instance_variable_get(:@population_criteria).delete_at(simple_xml_model.instance_variable_get(:@population_criteria).index {|pc2| pc == pc2})
+          simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "DENEX"}}
+        end
+      end
     end
     # remove populations in simple_xml if simple_xml version has no preconditions and HQMF2 version does not have that population
     # simple_xml_model.instance_variable_set(:@population_criteria, simple_xml_model.instance_variable_get(:@population_criteria).reject { |pop_crit| hqmf_populations.reject{ |pop| !pop.key?(pop_crit.type) }.empty? && pop_crit.preconditions.empty? })
