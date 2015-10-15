@@ -18,7 +18,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    # if measure_name == "CMS156v4" or measure_name == "CMS90v5" or measure_name == "CMS135v4"
+    # if measure_name == "CMS156v4" or measure_name == "CMS68v5" or measure_name == "CMS124v4" or measure_name == "CMS123v4" or measure_name == "CMS82v3" or measure_name == "CMS132v4" or measure_name == "CMS68v5" or measure_name == "CMS55v4"
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
@@ -183,7 +183,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   def remap_ids(measure_model)
 
-    criteria_list = (measure_model.all_data_criteria + measure_model.source_data_criteria)
+    criteria_list = (measure_model.source_data_criteria + measure_model.all_data_criteria)
     criteria_map = get_criteria_map(measure_model.source_data_criteria, measure_model.all_data_criteria)
 
     # Normalize the HQMF model IDS
@@ -210,6 +210,8 @@ class HQMFVsSimpleTest < Minitest::Test
       if dc.specific_occurrence && dc.specific_occurrence_const
         dc.instance_variable_set(:@specific_occurrence_const, "Occurence #{dc.specific_occurrence}")
       end
+
+      dc.description.gsub!(/\s+/, " ") if dc.description
 
       dc.id = hash_criteria(dc, criteria_map)
       dc.instance_variable_set(:@source_data_criteria, dc.id)
@@ -251,7 +253,6 @@ class HQMFVsSimpleTest < Minitest::Test
     sha256 << (criteria.status.nil? ? "3-<nil>:" : "3-#{criteria.status}:")
     sha256 << "4-#{criteria.negation}:"
     sha256 << (criteria.specific_occurrence.nil? ? "5-<nil>:" : "5-#{criteria.specific_occurrence}:")
-    sha256 << (criteria.negation_code_list_id.nil? ? "5-<nil>:" : "5-#{criteria.negation_code_list_id}:")
 
     # build hashes of each complex child... these will update refereces to other data criteria as the hash is built
     sha256 << (criteria.value.nil? ? "6-<nil>:" : "6-#{hash_values(criteria.value)}:")
@@ -259,6 +260,7 @@ class HQMFVsSimpleTest < Minitest::Test
     sha256 << (criteria.subset_operators.nil? ? "8-<nil>:" : "8-#{hash_subsets(criteria.subset_operators)}:")
     sha256 << (criteria.temporal_references.nil? ? "9-<nil>:" : "9-#{hash_temporals(criteria.temporal_references, criteria_map)}:")
     sha256 << (criteria.field_values.nil? ? "10-<nil>:" : "10-#{hash_fields(criteria.field_values)}:")
+    sha256 << (criteria.negation_code_list_id.nil? ? "11-<nil>:" : "11-#{criteria.negation_code_list_id}:")
 
     #sha256.hexdigest
     sha256
