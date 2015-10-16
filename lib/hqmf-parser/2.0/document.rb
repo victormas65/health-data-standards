@@ -43,8 +43,8 @@ module HQMF2
       end
 
       # Used to keep track of all children criteria contained in the data criteria
-      child_criteria_ids = []
-      temporal_reference_ids = []
+      @child_criteria_ids = []
+      @temporal_reference_ids = []
 
       # Extract the source data criteria from data criteria
       @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria, @data_criteria_references, @occurrences_map)
@@ -65,12 +65,15 @@ module HQMF2
           criteria.instance_variable_set(:@source_data_criteria, collapsed_source_data_criteria[criteria.id])
         end
         handle_variable(criteria) if criteria.variable
-        child_criteria_ids.concat(criteria.children_criteria)
+        @child_criteria_ids.concat(criteria.children_criteria)
         criteria.temporal_references.each do |tr|
-          temporal_reference_ids << tr.reference.id
+          @temporal_reference_ids << tr.reference.id
         end
         @data_criteria << criteria
       end
+
+      @child_criteria_ids.uniq
+      @temporal_reference_ids.uniq
 
       # Patch descriptions for all data criteria and source data criteria
 
@@ -173,7 +176,8 @@ module HQMF2
 
       # Remove any data criteria from the main data criteria list that already has an equivalent member and no references to it
       # The goal of this is to remove any data criteria that should not be purely a source
-      @data_criteria.reject! {|dc| !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2, child_criteria_ids, temporal_reference_ids)}.nil?}
+      # Ignore any referenced by child criteria
+      @data_criteria.reject! {|dc| @child_criteria_ids.index(dc.id).nil? && !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2)}.nil?}
 
     end
 
@@ -321,7 +325,7 @@ module HQMF2
     end
 
     # Check if one data criteria contains the others information by checking that one has everything the other has (or more)
-    def detect_criteria_covered_by_another(data_criteria, check_criteria, child_criteria_ids, temporal_reference_ids)
+    def detect_criteria_covered_by_another(data_criteria, check_criteria)
       same_definition = data_criteria.definition == check_criteria.definition
       same_status = data_criteria.status == check_criteria.status
       same_children = data_criteria.children_criteria.sort.join(",") == check_criteria.children_criteria.sort.join(",")
@@ -333,14 +337,10 @@ module HQMF2
       same_negation_values = data_criteria.negation_code_list_id.nil? && !check_criteria.negation_code_list_id.nil? || data_criteria.negation_code_list_id == check_criteria.negation_code_list_id
       no_specific_occurence = data_criteria.specific_occurrence.nil?
       if same_definition && same_status && same_children && same_variable && same_value && same_temporal_references && same_field_values && same_negation_values
-        # Even if the criteria is contained in another, if there is third criteria referencing it via children, then it should stay
-        if child_index = child_criteria_ids.index(data_criteria.id)
-          # Decrement the reference in case there are additional criteria maintained with the same id (shouldn't happen)
-          child_criteria_ids.delete_at(child_index)
-          return false
-        end
-        if !data_criteria.specific_occurrence.nil? && temporal_index = temporal_reference_ids.index(data_criteria.id)
-          temporal_reference_ids.delete_at(temporal_index)
+        # Even if the criteria is contained in another, if there is third criteria
+        #  referencing it via temporal references, and it is a specific reference,
+        #  then it should stay
+        if !data_criteria.specific_occurrence.nil? && temporal_index = @temporal_reference_ids.index(data_criteria.id)
           return false
         end
         return true
