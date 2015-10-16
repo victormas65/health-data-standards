@@ -18,7 +18,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    # if measure_name == "CMS156v4" or measure_name == "CMS68v5" or measure_name == "CMS124v4" or measure_name == "CMS123v4" or measure_name == "CMS82v3" or measure_name == "CMS132v4" or measure_name == "CMS68v5" or measure_name == "CMS55v4"
+    # if measure_name == "CMS133v4" or measure_name == "CMS128v4"# or measure_name == "CMS153v4" or measure_name == "CMS68v5" or measure_name == "CMS124v4" or measure_name == "CMS123v4" or measure_name == "CMS82v3" or measure_name == "CMS55v4"
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
@@ -139,6 +139,20 @@ class HQMFVsSimpleTest < Minitest::Test
       field_values = hqmf_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.271"}.first.field_values
       field_values["ORDINALITY"] = field_values["ORDINAL"]
       field_values.delete("ORDINAL")
+    end
+
+    # The following have issues where the proper diagnosis title and description are replaced by VTE
+    if measure_name == "CMS69v4"
+      hqmf_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.600.1.1751"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      hqmf_model.source_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.600.1.1751"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      simple_xml_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.600.1.1751"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      simple_xml_model.source_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.600.1.1751"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+    end
+    if measure_name == "CMS153v4"
+      hqmf_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.464.1003.198.12.1034" || dc.code_list_id == "2.16.840.1.113883.3.464.1003.111.12.1008"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      hqmf_model.source_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.464.1003.198.12.1034" || dc.code_list_id == "2.16.840.1.113883.3.464.1003.111.12.1008"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      simple_xml_model.all_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.464.1003.198.12.1034" || dc.code_list_id == "2.16.840.1.113883.3.464.1003.111.12.1008"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
+      simple_xml_model.source_data_criteria.select {|dc| dc.code_list_id == "2.16.840.1.113883.3.464.1003.198.12.1034" || dc.code_list_id == "2.16.840.1.113883.3.464.1003.111.12.1008"}.each {|dc| dc.instance_variable_set(:@title, ""); dc.instance_variable_set(:@description, "")}
     end
   end
 
