@@ -43,8 +43,9 @@ module HQMF2
       end
 
       # Used to keep track of all children criteria contained in the data criteria
-      @child_criteria_ids = []
-      @temporal_reference_ids = []
+      child_criteria_ids = []
+      temporal_reference_ids = []
+      @population_criteria_reference_ids = []
 
       # Extract the source data criteria from data criteria
       @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria, @data_criteria_references, @occurrences_map)
@@ -65,15 +66,12 @@ module HQMF2
           criteria.instance_variable_set(:@source_data_criteria, collapsed_source_data_criteria[criteria.id])
         end
         handle_variable(criteria) if criteria.variable
-        @child_criteria_ids.concat(criteria.children_criteria)
+        child_criteria_ids.concat(criteria.children_criteria)
         criteria.temporal_references.each do |tr|
-          @temporal_reference_ids << tr.reference.id
+          temporal_reference_ids << tr.reference.id if tr.reference.id != HQMF::Document::MEASURE_PERIOD_ID
         end
         @data_criteria << criteria
       end
-
-      @child_criteria_ids.uniq
-      @temporal_reference_ids.uniq
 
       # Patch descriptions for all data criteria and source data criteria
 
@@ -174,10 +172,14 @@ module HQMF2
       @populations.push *@stratifications
       handle_verbose_references
 
+      child_criteria_ids.uniq
+      temporal_reference_ids.uniq
+      @population_criteria_reference_ids.uniq
+
       # Remove any data criteria from the main data criteria list that already has an equivalent member and no references to it
       # The goal of this is to remove any data criteria that should not be purely a source
       # Ignore any referenced by child criteria
-      @data_criteria.reject! {|dc| @child_criteria_ids.index(dc.id).nil? && !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2)}.nil?}
+      @data_criteria.reject! {|dc| child_criteria_ids.index(dc.id).nil? && temporal_reference_ids.index(dc.id).nil? && @population_criteria_reference_ids.index(dc.id).nil? && !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2)}.nil?}
 
     end
 
@@ -294,6 +296,9 @@ module HQMF2
       # this can happen since the hqmf 2.0 will export a DENOM, NUMER, etc for each population, even if identical.
       # if we have identical, just re-use it rather than creating DENOM_1, NUMER_1, etc.
       identical = @population_criteria.select {|pc| pc.to_model.hqmf_id == criteria.to_model.hqmf_id}
+
+      @population_criteria_reference_ids.concat(criteria.to_model.referenced_data_criteria)
+
       if (identical.empty?)
         # this section constructs a human readable id.  The first IPP will be IPP, the second will be IPP_1, etc.  This allows the populations to be
         # more readable.  The alternative would be to have the hqmf ids in the populations, which would work, but is difficult to read the populations.
@@ -340,9 +345,6 @@ module HQMF2
         # Even if the criteria is contained in another, if there is third criteria
         #  referencing it via temporal references, and it is a specific reference,
         #  then it should stay
-        if !data_criteria.specific_occurrence.nil? && temporal_index = @temporal_reference_ids.index(data_criteria.id)
-          return false
-        end
         return true
       else
         return false
