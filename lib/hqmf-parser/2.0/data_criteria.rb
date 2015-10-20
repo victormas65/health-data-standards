@@ -1,5 +1,3 @@
-require "pry"
-
 module HQMF2
   # Represents a data criteria specification
   class DataCriteria
@@ -92,7 +90,6 @@ module HQMF2
           idExtension_xpath = './*/cda:id/@extension'
           idRoot_xpath = './*/cda:id/@root'
           return if !(attr_val(idExtension_xpath) =~ /^occ[A-Z]of_qdm_var_/).nil?
-          @id = "#{attr_val(idExtension_xpath)}_#{attr_val(idRoot_xpath)}"
           @verbose_reference = true
           #puts "Updated grouper: #{@id} #{@verbose_reference}"
         end
@@ -198,12 +195,14 @@ module HQMF2
           reference_criteria = @data_criteria_references[strip_tokens(ref_id)] if reference
           reference_criteria = @data_criteria_references[strip_tokens(verbose_ref_id)] if verbose_ref_id && !reference_criteria
           if reference_criteria
-            @title = reference_criteria.title
-            @description = reference_criteria.description
             @definition = reference_criteria.definition
             @status = reference_criteria.status
-            @code_list_id = reference_criteria.code_list_id
-            @source_data_criteria = @id
+            if @specific_occurrence
+              @title = reference_criteria.title
+              @description = reference_criteria.description
+              @code_list_id = reference_criteria.code_list_id
+              @source_data_criteria = reference_criteria.id
+            end
           else
             puts "MISSING_DC_REF: #{ref_id} & #{verbose_ref_id}" unless @variable
             @definition = 'variable'
