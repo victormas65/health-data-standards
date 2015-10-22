@@ -48,6 +48,7 @@ module HQMF2
       @children_criteria = extract_child_criteria
       @comments = @entry.xpath("./#{CRITERIA_GLOB}/cda:text/cda:xml/cda:qdmUserComments/cda:item/text()", HQMF2::Document::NAMESPACES).map{ |v| v.content }
       @variable = extract_variable
+      @do_not_group = false
 
       # Try to determine what kind of data criteria we are dealing with
       # First we look for a template id and if we find one just use the definition
@@ -353,6 +354,10 @@ module HQMF2
     # Return a new DataCriteria instance with only grouper attributes set
     def extract_variable_grouper
       return unless @variable
+      if @do_not_group
+        @children_criteria[0] = "GROUP_#{@children_criteria.first}" if @children_criteria && @children_criteria.length == 1
+        return
+      end
       @variable = false
       @id = "GROUP_#{@id}"
       @specific_occurrence = nil
@@ -654,9 +659,20 @@ module HQMF2
 
     # TODO: Why are specific occurrences of variables not building children?
     def handle_specific_variables
-      if @definition == 'derived' && @children_criteria.empty?
-        # puts "Fixing SO grouper empty children for #{@id} with #{@source_data_criteria}"
-        @children_criteria << @source_data_criteria
+      if @definition == 'derived' 
+        if @children_criteria.empty?
+          # puts "Fixing SO grouper empty children for #{@id} with #{@source_data_criteria}"
+          @children_criteria << @source_data_criteria
+        end
+        if @children_criteria.length == 1 && (@children_criteria.first == @source_data_criteria || @source_data_criteria.nil?)
+          reference_criteria = @data_criteria_references[@children_criteria.first] if @children_criteria.first
+          unless temporal_references.empty? || reference_criteria.nil?
+            @do_not_group = true  # easier to track than all testing all features of these cases
+            @subset_operators = reference_criteria.subset_operators
+            @derivation_operator = reference_criteria.derivation_operator
+            @variable = reference_criteria.variable
+          end
+        end
       end
     end
 
