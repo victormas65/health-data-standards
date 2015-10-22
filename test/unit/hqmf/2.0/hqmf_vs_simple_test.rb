@@ -18,8 +18,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    #"CMS62v4", "CMS53v4", "CMS65v5", "CMS9v4", "CMS124v4", "CMS123v4", "CMS82v3", "CMS122v4", "CMS133v4", "CMS188v5"
-    if ["CMS62v4", "CMS53v4", "CMS65v5", "CMS9v4", "CMS124v4", "CMS123v4", "CMS82v3", "CMS122v4", "CMS133v4", "CMS178v5", "CMS31v4"].index(measure_name)
+    if ["CMS62v4", "CMS53v4", "CMS65v5", "CMS9v4", "CMS109v4", "CMS123v4", "CMS32v5", "CMS188v5", "CMS133v4", "CMS135v4", "CMS31v4"].index(measure_name)
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
@@ -132,6 +131,10 @@ class HQMFVsSimpleTest < Minitest::Test
 
     remap_arbitrary_dc_v2_diff(simple_xml_model)
     remap_arbitrary_dc_v2_diff(hqmf_model)
+    # Remove comments from both sets of populations criteria
+    simple_xml_model.instance_variable_get(:@population_criteria).each do |pop_crit|
+      recurively_remove_precondition_comments(pop_crit)
+    end
 
     # modify both populations to reduce erroneous error reporting
     remap_populations(simple_xml_model, hqmf_model)
@@ -145,11 +148,11 @@ class HQMFVsSimpleTest < Minitest::Test
         dc.instance_variable_set(:@code_list_id, "")
         dc.instance_variable_set(:@inline_code_list, "")
       end
-      # Changes specific occurence consts to a generalized naming pattern
+      # Changes specific occurrence consts to a generalized naming pattern
       # The goal is to reduce errors from arbitrary naming patterns that can
       #   pop up
       if dc.specific_occurrence && dc.specific_occurrence_const
-        dc.instance_variable_set(:@specific_occurrence_const, "Occurence #{dc.specific_occurrence}")
+        dc.instance_variable_set(:@specific_occurrence_const, "Occurrence #{dc.specific_occurrence}")
       end
 
       # ORDINALITY was changed to ORDINAL in the new HQMF, this nullifies that error
@@ -171,6 +174,16 @@ class HQMFVsSimpleTest < Minitest::Test
           end
         end
       end
+      
+      # NOTE: This actually is mapping v2 to SimpleXML notation, since it is much more straightforward
+      if dc.subset_operators
+        dc.subset_operators.each do |sso|
+          if sso.type == "TIMEDIFF"
+            sso.instance_variable_set(:@type, "DATETIMEDIFF")
+            sso.instance_variable_set(:@value, nil)
+          end
+        end
+      end
 
       # title and description for all are technically arbitrary values
       dc.instance_variable_set(:@title, '')
@@ -188,8 +201,8 @@ class HQMFVsSimpleTest < Minitest::Test
       hqmf_model.source_data_criteria.select {|dc| dc.id == "qdm_var_During_2F8D4BA8_BA4E_4DC8_9C35_11D4ADFE3E75"}.each {|dc| dc.instance_variable_set(:@code_list_id, nil)}
     end
 
-    # Handles measures that are "regardless of age"
-    if ["CMS62v4"].index(measure_name)
+    # Handles measures that are "regardless of age" or seems to not refer to Ptient birthdate characteristic
+    if ["CMS31v4", "CMS32v5", "CMS62v4", "CMS185v4"].index(measure_name)
       simple_xml_model.source_data_criteria.reject! {|dc| dc.definition == "patient_characteristic_birthdate"}
     end
 
@@ -249,7 +262,15 @@ class HQMFVsSimpleTest < Minitest::Test
     # simple_xml_model.instance_variable_set(:@population_criteria, simple_xml_model.instance_variable_get(:@population_criteria).reject { |pop_crit| hqmf_populations.reject{ |pop| !pop.key?(pop_crit.type) }.empty? && pop_crit.preconditions.empty? })
 
   end
-
+  
+  # We shouldn't be comparing comments stored in the formats
+  def recurively_remove_precondition_comments(precondition)
+      precondition.instance_variable_set(:@comments, nil)
+      precondition.preconditions.each do |precon|
+        recurively_remove_precondition_comments(precon)        
+      end
+  end
+      
   def remap_ids(measure_model)
 
     criteria_list = (measure_model.source_data_criteria + measure_model.all_data_criteria)
