@@ -22,6 +22,7 @@ module HQMF2
       dc = DataCriteria.new(entry, data_criteria_references, occurrences_map)
       dc.instance_variable_set(:@definition, 'derived') if [HQMF::DataCriteria::SATISFIES_ANY, HQMF::DataCriteria::SATISFIES_ALL].include? dc.definition
 
+      dc.instance_variable_set(:@source_data_criteria, dc.id)
       dc.instance_variable_set(:@field_values, {})
       dc.instance_variable_set(:@temporal_references, [])
       dc.instance_variable_set(:@subset_operators, [])
