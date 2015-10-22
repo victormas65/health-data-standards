@@ -202,7 +202,6 @@ module HQMF2
               @title = reference_criteria.title
               @description = reference_criteria.description
               @code_list_id = reference_criteria.code_list_id
-              @source_data_criteria = reference_criteria.id
             end
           else
             puts "MISSING_DC_REF: #{ref_id} & #{verbose_ref_id}" unless @variable
