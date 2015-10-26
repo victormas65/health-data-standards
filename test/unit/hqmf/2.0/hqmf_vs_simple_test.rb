@@ -18,7 +18,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    if ["CMS62v4", "CMS53v4", "CMS65v5", "CMS9v4", "CMS109v4", "CMS123v4", "CMS32v5", "CMS188v5", "CMS133v4", "CMS135v4", "CMS31v4"].index(measure_name)
+    if ["CMS62v4", "CMS52v4", "CMS65v5", "CMS159v4", "CMS154v4", "CMS73v4", "CMS32v5", "CMS178v5", "CMS129v5", "CMS108v4", "CMS141v5"].index(measure_name)
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
@@ -68,7 +68,7 @@ class HQMFVsSimpleTest < Minitest::Test
     # end
 
     # remap values in simple_xml and hqmf_model to resolve ignorable differences
-    remap_arbitrary_v2_diffs(simple_xml_model, hqmf_model)
+    remap_arbitrary_v2_diffs(simple_xml_model, hqmf_model, measure_name)
 
     # certain measures carry over currently unused by products
     individual_measure_corrections(simple_xml_model, hqmf_model, measure_name)
@@ -125,9 +125,11 @@ class HQMFVsSimpleTest < Minitest::Test
 
   end
 
-  def remap_arbitrary_v2_diffs(simple_xml_model, hqmf_model)
-    # FIXME (10/19/2015) removes the source data criteria for patient expired from simplexml, which at this time does not exist in the HQMF2.1 version or in the human readable version
-    simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.code_list_id == "2.16.840.1.113883.3.117.1.7.1.309"}
+  def remap_arbitrary_v2_diffs(simple_xml_model, hqmf_model, measure_name)
+    # FIXME (10/19/2015) removes the source data criteria for patient expired from simplexml, which at this time does not exist in the HQMF2.1 version or in the human readable version for most measures
+    unless ["CMS159v4", "CMS160v4", "CMS178v5"].index(measure_name)
+      simple_xml_model.instance_variable_get(:@source_data_criteria).reject! {|sdc| sdc.definition == "patient_characteristic_expired"}
+    end
 
     remap_arbitrary_dc_v2_diff(simple_xml_model)
     remap_arbitrary_dc_v2_diff(hqmf_model)
@@ -148,6 +150,13 @@ class HQMFVsSimpleTest < Minitest::Test
         dc.instance_variable_set(:@code_list_id, "")
         dc.instance_variable_set(:@inline_code_list, "")
       end
+
+      # Removes inline code list and id
+      if dc.definition == "patient_characteristic_expired"
+        dc.instance_variable_set(:@code_list_id, "")
+        dc.instance_variable_set(:@inline_code_list, "")
+      end
+
       # Changes specific occurrence consts to a generalized naming pattern
       # The goal is to reduce errors from arbitrary naming patterns that can
       #   pop up
@@ -174,7 +183,7 @@ class HQMFVsSimpleTest < Minitest::Test
           end
         end
       end
-      
+
       # NOTE: This actually is mapping v2 to SimpleXML notation, since it is much more straightforward
       if dc.subset_operators
         dc.subset_operators.each do |sso|
@@ -202,7 +211,7 @@ class HQMFVsSimpleTest < Minitest::Test
     end
 
     # Handles measures that are "regardless of age" or seems to not refer to Ptient birthdate characteristic
-    if ["CMS31v4", "CMS32v5", "CMS62v4", "CMS185v4"].index(measure_name)
+    if ["CMS129v5", "CMS31v4", "CMS32v5", "CMS62v4", "CMS185v4", "CMS157v4"].index(measure_name)
       simple_xml_model.source_data_criteria.reject! {|dc| dc.definition == "patient_characteristic_birthdate"}
     end
 
@@ -230,47 +239,35 @@ class HQMFVsSimpleTest < Minitest::Test
     simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "title" }}
     hqmf_populations = hqmf_model.instance_variable_get(:@populations)
 
+
     # More restrictive (only checks DENEXCEP) removal of populations in simple_xml
-    # HQMF2 version does not have that population
-    if hqmf_populations.reject{ |pop| !pop.key?("DENEXCEP") }.empty? and
-      # and obtain all denexceps (and only run if they exist)
-      denexceps = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=="DENEXCEP"}
+    # obtain all denexceps and denex (and only run if they exist)
+    if unnecessary_pop_crit = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=~/(DENEX|MSRPOPLEX)/}
 
-      denexceps.each do |pc|
+      unnecessary_pop_crit.each do |pc|
+        # if HQMF2 version does not have that population
+        next unless hqmf_populations.reject{ |pop| !pop.key?(pc.type) || pop[pc.type] != pc.id }.empty?
         if pc.preconditions.empty?
           # Then remove DENEXCEP from population  criteria and any population
           simple_xml_model.instance_variable_get(:@population_criteria).delete_at(simple_xml_model.instance_variable_get(:@population_criteria).index {|pc2| pc == pc2})
-          simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "DENEXCEP"}}
+          simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, value| value == pc.id}}
         end
       end
     end
 
-    # if HQMF2 version does not have that population
-    if hqmf_populations.reject{ |pop| !pop.key?("DENEX") }.empty? and
-      # and obtain all denexcs (and only run if they exist)
-      denexs = simple_xml_model.instance_variable_get(:@population_criteria).select {|pc| pc.type=="DENEX"}
-
-      denexs.each do |pc|
-        if pc.preconditions.empty?
-          # Then remove DENEXCEP from population  criteria and any population
-          simple_xml_model.instance_variable_get(:@population_criteria).delete_at(simple_xml_model.instance_variable_get(:@population_criteria).index {|pc2| pc == pc2})
-          simple_xml_model.instance_variable_get(:@populations).map! { |pop| pop.reject { |key, vaule| key == "DENEX"}}
-        end
-      end
-    end
     # remove populations in simple_xml if simple_xml version has no preconditions and HQMF2 version does not have that population
     # simple_xml_model.instance_variable_set(:@population_criteria, simple_xml_model.instance_variable_get(:@population_criteria).reject { |pop_crit| hqmf_populations.reject{ |pop| !pop.key?(pop_crit.type) }.empty? && pop_crit.preconditions.empty? })
 
   end
-  
+
   # We shouldn't be comparing comments stored in the formats
   def recurively_remove_precondition_comments(precondition)
       precondition.instance_variable_set(:@comments, nil)
       precondition.preconditions.each do |precon|
-        recurively_remove_precondition_comments(precon)        
+        recurively_remove_precondition_comments(precon)
       end
   end
-      
+
   def remap_ids(measure_model)
 
     criteria_list = (measure_model.source_data_criteria + measure_model.all_data_criteria)
