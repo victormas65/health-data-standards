@@ -28,6 +28,7 @@ module HQMF2
     # @param [Nokogiri::XML::Element] entry the parsed HQMF entry
     def initialize(entry, data_criteria_references = {}, occurrences_map = {})
       @entry = entry
+      @do_not_group = false
       @template_ids = extract_template_ids
       @data_criteria_references = data_criteria_references
       @occurrences_map = occurrences_map
@@ -44,11 +45,10 @@ module HQMF2
       @temporal_references = extract_temporal_references
       @derivation_operator = extract_derivation_operator
       @field_values = extract_field_values
-      @subset_operators = extract_subset_operators
       @children_criteria = extract_child_criteria
       @comments = @entry.xpath("./#{CRITERIA_GLOB}/cda:text/cda:xml/cda:qdmUserComments/cda:item/text()", HQMF2::Document::NAMESPACES).map{ |v| v.content }
       @variable = extract_variable
-      @do_not_group = false
+      @subset_operators = extract_subset_operators
 
       # Try to determine what kind of data criteria we are dealing with
       # First we look for a template id and if we find one just use the definition
@@ -221,6 +221,20 @@ module HQMF2
         if defs
           @definition = defs['definition']
           @status = defs['status'].length > 0 ? defs['status'] : nil
+          # Only attempt to grab settings if no status is present
+          begin
+            settings = HQMF::DataCriteria.get_settings_for_definition(defs['definition'], defs['status'])
+            if settings
+              # apply information from settings to the data criteria
+              @title = settings["title"] if !settings["title"].blank?
+              @definition = settings["definition"] if !settings["definition"].blank?
+              @status = settings["status"] if !settings["status"].blank?
+              @category = settings["category"] if !settings["category"].blank?
+              @hard_status = settings["hard_status"]
+            end
+          rescue Exception
+            # ignore error (none should exist)
+          end unless @status
           found ||= true
         elsif template_id == VARIABLE_TEMPLATE
           @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
@@ -335,6 +349,8 @@ module HQMF2
         @description = "#{@description}: #{exact_desc}"
       end
 
+      @code_list_id = nil if @derivation_operator
+
       # prevent json model generation of empty children and comments
       cc = !children_criteria.blank? ? children_criteria : nil
       comments = !@comments.blank? ? @comments : nil
@@ -359,6 +375,19 @@ module HQMF2
       end
       @variable = false
       @id = "GROUP_#{@id}"
+      if @children_criteria.length == 1 && @children_criteria[0] =~ /GROUP_/
+        reference_criteria = @data_criteria_references[@children_criteria.first] if @children_criteria.first
+        @title = reference_criteria.title
+        @type = reference_criteria.subset_operators
+        @definition = reference_criteria.definition
+        @status = reference_criteria.status
+        @code_list_id = reference_criteria.code_list_id
+        @temporal_references = reference_criteria.temporal_references
+        @subset_operators = reference_criteria.subset_operators
+        @variable = reference_criteria.variable
+        @value = reference_criteria.value
+        @children_criteria = []
+      end
       @specific_occurrence = nil
       @specific_occurrence_const = nil
       DataCriteria.new(@entry, @data_criteria_references, @occurrences_map).extract_as_grouper
@@ -658,17 +687,17 @@ module HQMF2
 
     # TODO: Why are specific occurrences of variables not building children?
     def handle_specific_variables
-      if @definition == 'derived' 
+      if @definition == 'derived'
         if @children_criteria.empty?
           # puts "Fixing SO grouper empty children for #{@id} with #{@source_data_criteria}"
           @children_criteria << @source_data_criteria
         end
         if @children_criteria.length == 1 && (@children_criteria.first == @source_data_criteria || @source_data_criteria.nil?)
           reference_criteria = @data_criteria_references[@children_criteria.first] if @children_criteria.first
-          unless temporal_references.empty? || reference_criteria.nil?
+          unless reference_criteria.nil?
             @do_not_group = true  # easier to track than all testing all features of these cases
-            @subset_operators = reference_criteria.subset_operators
-            @derivation_operator = reference_criteria.derivation_operator
+            @subset_operators ||= reference_criteria.subset_operators
+            @derivation_operator ||= reference_criteria.derivation_operator
             @variable = reference_criteria.variable
           end
         end
@@ -684,6 +713,7 @@ module HQMF2
         # No need to run if there is no code id
         unless (@negation && code_id == "REASON") || code_id.nil?
           value = DataCriteria.parse_value(field, './*/cda:value')
+          value ||= DataCriteria.parse_value(field, './*/cda:effectiveTime')
           fields[code_id] = value if value && code_id
         end
       end
@@ -697,10 +727,10 @@ module HQMF2
 
       fields.merge! HQMF2::FieldValueHelper.parse_field_values(@entry, @negation)
       # special case for fulfills operator.  assuming there is only a possibility of having one of these
-      fulfils = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="FLFS"]/cda:criteriaReference', HQMF2::Document::NAMESPACES)
-      if fulfils
+      fulfills = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="FLFS"]/cda:criteriaReference', HQMF2::Document::NAMESPACES)
+      if fulfills
         # grab the child element if we don't have a reference
-        fields["FLFS"] =  TypedReference.new(fulfils)
+        fields["FLFS"] =  TypedReference.new(fulfills)
       end
       fields
     end
@@ -735,7 +765,8 @@ module HQMF2
             value = Range.new(value_def)
           when 'CD'
             value = Coded.new(value_def)
-          when 'ANY'
+          when 'ANY', 'IVL_TS'
+            # FIXME (10/26/2015) IVL_TS should be able to handle other values, not just AnyValue
             value = AnyValue.new()
           else
             raise "Unknown value type [#{value_type}]"
