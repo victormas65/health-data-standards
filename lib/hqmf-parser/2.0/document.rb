@@ -177,8 +177,6 @@ module HQMF2
       @populations.push *@stratifications
       handle_verbose_references
 
-      child_criteria_ids.uniq
-      temporal_reference_ids.uniq
       @population_criteria_reference_ids.uniq
       @data_criteria.each do |dc|
         child_criteria_ids.concat(dc.children_criteria)
@@ -187,6 +185,8 @@ module HQMF2
           temporal_reference_ids << tr.reference.id if tr.reference.id != HQMF::Document::MEASURE_PERIOD_ID
         end
       end
+      child_criteria_ids.uniq
+      temporal_reference_ids.uniq
 
       # Remove any data criteria from the main data criteria list that already has an equivalent member and no references to it
       # The goal of this is to remove any data criteria that should not be purely a source
@@ -353,7 +353,7 @@ module HQMF2
 
       same_value = data_criteria.value.nil? && !check_criteria.value.nil? || data_criteria.value.try(:to_model).try(:to_json) == check_criteria.value.try(:to_model).try(:to_json)
       same_temporal_references = check_criteria.temporal_references.nil? || data_criteria.temporal_references.nil? && !check_criteria.temporal_references.nil? || data_criteria.temporal_references.empty?
-      same_field_values = data_criteria.field_values.nil? && !check_criteria.field_values.nil? || data_criteria.field_values.try(:to_json) == check_criteria.field_values.try(:to_json)
+      same_field_values = data_criteria.field_values.nil? && !check_criteria.field_values.nil? || data_criteria.field_values.try(:to_json) == check_criteria.field_values.try(:to_json) || data_criteria.field_values.empty?
       same_negation_values = data_criteria.negation_code_list_id.nil? && !check_criteria.negation_code_list_id.nil? || data_criteria.negation_code_list_id == check_criteria.negation_code_list_id
       no_specific_occurence = data_criteria.specific_occurrence.nil?
       if same_definition && same_status && same_children &&
