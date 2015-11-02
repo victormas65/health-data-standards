@@ -101,7 +101,7 @@ module HQMF2
     def set_code_list_path_and_result_value
 
       if @template_ids.empty? && @specific_occurrence
-        template = @entry.document.at_xpath("//cda:id[@root='#{@source_data_criteria_root}' and @extension='#{@source_data_criteria}']/../cda:templateId/cda:item/@root")
+        template = @entry.document.at_xpath("//cda:id[@root='#{@source_data_criteria_root}' and @extension='#{@source_data_criteria_extension}']/../cda:templateId/cda:item/@root")
         if template
           mapping = ValueSetHelper.get_mapping_for_template(template.to_s)
           @value = DataCriteria.parse_value(@entry,mapping[:result_path]) if mapping && mapping[:result_path]
@@ -403,7 +403,6 @@ module HQMF2
     #   @subset_operators = []
     #   @negation = false
     #   if !(@title =~ /#{occurrenceIdRegex}/) && @description != title()
-    #     # require 'byebug'; debugger if @specific_occurrence
     #     @specific_occurrence = nil
     #     @specific_occurrence_const = nil
     #   end
@@ -603,7 +602,7 @@ module HQMF2
       specific_def = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="OCCR"]', HQMF2::Document::NAMESPACES)
       source_def = @entry.at_xpath('./*/cda:outboundRelationship[cda:subsetCode/@code="SOURCE"]', HQMF2::Document::NAMESPACES)
       if specific_def
-        @source_data_criteria = HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@extension')
+        @source_data_criteria_extension = HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@extension')
         @source_data_criteria_root = HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@root')
         @specific_occurrence_const = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationRoot')
         @specific_occurrence = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationExtension')
@@ -612,7 +611,7 @@ module HQMF2
         # build regex for extracting alpha-index of specific occurrences
         occurrenceLVNRegex = isVariable ? 'occ[A-Z]of_' : 'Occurrence[A-Z]of'
         occurrenceIdentifier = ""
-        strippedSDC = strip_tokens @source_data_criteria
+        strippedSDC = strip_tokens @source_data_criteria_extension
         strippedId = strip_tokens @id
 
         # TODO: What should happen is neither @id or @lvn has occurrence label?
@@ -650,7 +649,7 @@ module HQMF2
         elsif !(strippedSDC =~ /^#{occurrenceLVNRegex}qdm_var_/).nil?
           occurrenceIdentifier = strippedSDC[occIndex]
         end
-        @source_data_criteria = "#{@source_data_criteria}_#{@source_data_criteria_root}"
+        @source_data_criteria = "#{@source_data_criteria_extension}_#{@source_data_criteria_root}"
         if !occurrenceIdentifier.blank?
           # if it doesn't exist, add extracted occurrence to the map
           # puts "\tSetting #{@source_data_criteria}-#{@source_data_criteria_root} to #{occurrenceIdentifier}"

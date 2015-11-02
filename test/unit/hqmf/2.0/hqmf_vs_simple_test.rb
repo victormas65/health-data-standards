@@ -18,11 +18,11 @@ class HQMFVsSimpleTest < Minitest::Test
 
   Dir.glob(measure_files).each do | measure_filename |
     measure_name = File.basename(measure_filename, ".xml")
-    if ["CMS62v4", "CMS52v4", "CMS65v5", "CMS159v4", "CMS154v4", "CMS73v4", "CMS32v5", "CMS178v5", "CMS129v5", "CMS108v4", "CMS141v5"].index(measure_name)
+    # if ["CMS62v4", "CMS52v4", "CMS65v5", "CMS122v4", "CMS154v4", "CMS73v4", "CMS32v5", "CMS178v5", "CMS129v5", "CMS108v4", "CMS141v5"].index(measure_name)
       define_method("test_#{measure_name}") do
         do_roundtrip_test(measure_filename, measure_name)
       end
-    end
+    # end
   end
 
   def do_roundtrip_test(measure_filename, measure_name)
