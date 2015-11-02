@@ -133,6 +133,8 @@ module HQMF2
 
       if (lm.nil? || lm.kind_of?(HQMF::AnyValue)) && (hm.nil? || hm.kind_of?(HQMF::AnyValue))
         HQMF::AnyValue.new
+      elsif(!lm.nil? && !hm.nil? && lm.value == high.value && lm.unit.nil? && hm.unit.nil?)
+        HQMF::Value.new(lm.type, nil, lm.value, lm.inclusive?, lm.derived?, lm.expression)
       else
         HQMF::Range.new(model_type, lm, hm, wm)
       end
