@@ -51,10 +51,8 @@ module HQMF2
         extracted_criteria << entry
       end
 
-      # Used to keep track of all children criteria contained in the data criteria
-      child_criteria_ids = []
-      temporal_reference_ids = []
-      @population_criteria_reference_ids = []
+      # Used to keep track of referenced data criteria ids
+      @reference_ids = []
 
       # Extract the source data criteria from data criteria
       @source_data_criteria, collapsed_source_data_criteria = SourceDataCriteriaHelper.get_source_data_criteria_list(extracted_criteria, @data_criteria_references, @occurrences_map)
@@ -75,6 +73,11 @@ module HQMF2
           criteria.instance_variable_set(:@source_data_criteria, collapsed_source_data_criteria[criteria.id])
         end
         handle_variable(criteria) if criteria.variable
+
+        @reference_ids.concat(criteria.children_criteria)
+        criteria.temporal_references.each do |tr|
+          @reference_ids << tr.reference.id if tr.reference.id != HQMF::Document::MEASURE_PERIOD_ID
+        end if criteria.temporal_references
         @data_criteria << criteria
       end
 
@@ -176,22 +179,16 @@ module HQMF2
       # Push in the stratification populations after the unstratified populations
       @populations.push *@stratifications
       handle_verbose_references
-
-      @population_criteria_reference_ids.uniq
-      @data_criteria.each do |dc|
-        child_criteria_ids.concat(dc.children_criteria)
-        next unless dc.temporal_references
-        dc.temporal_references.each do |tr|
-          temporal_reference_ids << tr.reference.id if tr.reference.id != HQMF::Document::MEASURE_PERIOD_ID
-        end
-      end
-      child_criteria_ids.uniq
-      temporal_reference_ids.uniq
+      #
+      # @data_criteria.each do |dc|
+      # end
+      @reference_ids.uniq
 
       # Remove any data criteria from the main data criteria list that already has an equivalent member and no references to it
       # The goal of this is to remove any data criteria that should not be purely a source
       # Ignore any referenced by child criteria
-      @data_criteria.reject! {|dc| child_criteria_ids.index(dc.id).nil? && temporal_reference_ids.index(dc.id).nil? && @population_criteria_reference_ids.index(dc.id).nil? && !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2)}.nil?}
+      base_criteria_defs = ['patient_characteristic_ethnicity', 'patient_characteristic_gender', 'patient_characteristic_payer', 'patient_characteristic_race']
+      @data_criteria.reject! {|dc| @reference_ids.index(dc.id).nil? && !base_criteria_defs.include?(dc.definition) && !@data_criteria.detect{|dc2| dc != dc2 && dc.code_list_id == dc2.code_list_id && detect_criteria_covered_by_another(dc, dc2)}.nil?}
 
     end
 
@@ -310,7 +307,7 @@ module HQMF2
       # if we have identical, just re-use it rather than creating DENOM_1, NUMER_1, etc.
       identical = @population_criteria.select {|pc| pc.to_model.hqmf_id == criteria.to_model.hqmf_id}
 
-      @population_criteria_reference_ids.concat(criteria.to_model.referenced_data_criteria)
+      @reference_ids.concat(criteria.to_model.referenced_data_criteria)
 
       if (identical.empty?)
         # this section constructs a human readable id.  The first IPP will be IPP, the second will be IPP_1, etc.  This allows the populations to be

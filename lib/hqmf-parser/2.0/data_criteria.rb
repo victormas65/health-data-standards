@@ -370,7 +370,21 @@ module HQMF2
     def extract_variable_grouper
       return unless @variable
       if @do_not_group
-        @children_criteria[0] = "GROUP_#{@children_criteria.first}" if @children_criteria && @children_criteria.length == 1
+        if !@data_criteria_references["GROUP_#{@children_criteria.first}"].nil?
+          @children_criteria[0] = "GROUP_#{@children_criteria.first}" if @children_criteria && @children_criteria.length == 1
+        elsif @children_criteria.length == 1
+          reference_criteria = @data_criteria_references[@children_criteria.first] if @children_criteria.first
+          @title ||= reference_criteria.title
+          @type ||= reference_criteria.subset_operators
+          @definition ||= reference_criteria.definition
+          @status ||= reference_criteria.status
+          @code_list_id ||= reference_criteria.code_list_id
+          @temporal_references = reference_criteria.temporal_references if @temporal_references.empty?
+          @subset_operators ||= reference_criteria.subset_operators
+          @variable ||= reference_criteria.variable
+          @value ||= reference_criteria.value
+          @children_criteria = reference_criteria.children_criteria
+        end
         return
       end
       @variable = false

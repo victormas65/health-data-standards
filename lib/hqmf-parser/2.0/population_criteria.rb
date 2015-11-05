@@ -25,6 +25,8 @@ module HQMF2
       if !@title && obs_test.to_s == "OBS"
           @title = attr_val('../cda:code/cda:displayName/@value')
           @aggregator = attr_val('./cda:measureObservationDefinition/cda:methodCode/cda:item/@code')
+          # MEAN is handled in current code. Changed since it should have the same effect
+          @aggregator = 'MEAN' if @aggregator == 'AVERAGE'
       end
       if(!@hqmf_id) # The id extension is not required, if it's not provided use the code
         @hqmf_id = @type
@@ -52,21 +54,26 @@ module HQMF2
       raise "No Expression " if exp.nil?
 
       parts = exp.to_s.split("-")
-      if parts.length != 2
+      case parts.length
+      when 1
+        dc = @doc.find_criteria_by_lvn(parts.first.strip.split(".")[0])
+      when 2
+        children = parts.collect{|p| @doc.find_criteria_by_lvn(p.strip.split(".")[0]).id}
+        _id ="GROUP_TIMEDIFF_#{ @id_generator.next_id}"
+        dc = HQMF2::DataCriteriaWrapper.new(id: _id,
+                                            title: _id ,
+                                            subset_operators: [HQMF::SubsetOperator.new("DATETIMEDIFF", nil)],
+                                            children_criteria: children,
+                                            derivation_operator: HQMF::DataCriteria::XPRODUCT,
+                                            type: "derived" ,
+                                            definition: "derived" ,
+                                            negation: false,
+                                            source_data_criteria: _id,
+                                             )
+      else
         raise "Has an error here :: todo make more descriptive"
       end
-      children = parts.collect{|p| @doc.find_criteria_by_lvn(p.strip.split(".")[0]).id}
-      _id ="GROUP_TIMEDIFF_#{ @id_generator.next_id}"
-      dc = HQMF2::DataCriteriaWrapper.new(id: _id,
-                                          title: _id ,
-                                          subset_operators: [HQMF::SubsetOperator.new("TIMEDIFF", HQMF::AnyValue.new("ANYNonNull"))],
-                                          children_criteria: children,
-                                          derivation_operator: HQMF::DataCriteria::XPRODUCT,
-                                          type: "derived" ,
-                                          definition: "derived" ,
-                                          negation: false,
-                                          source_data_criteria: _id,
-                                           )
+
       @doc.add_data_criteria(dc)
       dc
 
