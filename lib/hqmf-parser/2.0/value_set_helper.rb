@@ -1,4 +1,5 @@
 module HQMF2
+  # Class containing value set information
   class ValueSetHelper
     # rubocop:disable Metrics/LineLength, Style/StringLiterals, Style/SpaceInsideHashLiteralBraces, Style/SpaceAfterColon
     VALUESET_MAP = {
@@ -90,6 +91,7 @@ module HQMF2
       "2.16.840.1.113883.10.20.28.3.116" => {valueset_path:"./*/cda:value", result_path: nil }
     }
     # rubocop:enable Metrics/LineLength, Style/StringLiterals, Style/SpaceInsideHashLiteralBraces, Style/SpaceAfterColon
+
     def self.get_mapping_for_template(template)
       VALUESET_MAP[template]
     end
