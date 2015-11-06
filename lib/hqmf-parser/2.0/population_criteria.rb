@@ -34,8 +34,14 @@ module HQMF2
 
       # Nest multiple preconditions under a single root precondition
       @preconditions = @entry.xpath('./*/cda:precondition[not(@nullFlavor)]', HQMF2::Document::NAMESPACES).collect do |pre|
-        Precondition.parse(pre,@doc,id_generator)
+        precondition = Precondition.parse(pre,@doc,id_generator)
+        if precondition.reference.nil? && precondition.preconditions.empty?
+          nil
+        else
+          precondition
+        end
       end
+      @preconditions.compact!
       if @type != "AGGREGATE"
         if @preconditions.length > 1 ||
            ( @preconditions.length == 1 && @preconditions[0].conjunction != conjunction_code)
