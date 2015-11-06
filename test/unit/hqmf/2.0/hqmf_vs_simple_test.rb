@@ -186,16 +186,6 @@ class HQMFVsSimpleTest < Minitest::Test
         end
       end
 
-      # NOTE: This actually is mapping v2 to SimpleXML notation, since it is much more straightforward
-      if dc.subset_operators
-        dc.subset_operators.each do |sso|
-          if sso.type == "TIMEDIFF"
-            sso.instance_variable_set(:@type, "DATETIMEDIFF")
-            sso.instance_variable_set(:@value, nil)
-          end
-        end
-      end
-
       # title and description for all are technically arbitrary values
       dc.instance_variable_set(:@title, '')
       dc.instance_variable_set(:@description, '')
@@ -282,13 +272,8 @@ class HQMFVsSimpleTest < Minitest::Test
 
     # Normalize the HQMF model IDS
     criteria_list.each do |dc|
-      dc.description.gsub!(/\s+/, " ") if dc.description
-
       dc.id = hash_criteria(dc, criteria_map)
       dc.instance_variable_set(:@source_data_criteria, dc.id)
-      if dc.type == :derived
-        dc.instance_variable_set(:@title, dc.id)
-      end
     end
 
     measure_model.all_population_criteria.each do |pc|
@@ -299,6 +284,7 @@ class HQMFVsSimpleTest < Minitest::Test
 
   end
 
+  # Swaps the Hash Id with the original data_criteria id
   def remap_preconditions(criteria_map, preconditions)
     return if preconditions.nil?
     preconditions.each do |precondition|

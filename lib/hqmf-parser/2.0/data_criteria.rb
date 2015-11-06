@@ -590,29 +590,6 @@ module HQMF2
     end
 
     def extract_specific_or_source
-
-      isVariable = extract_variable
-      occurrenceIdRegex = isVariable ? 'occ[A-Z]of_' : 'Occurrence[A-Z]_'
-      occIndex = isVariable ? 3 : 10
-      strippedLVN = strip_tokens @local_variable_name
-
-
-        #
-      if !(strippedLVN =~ /^#{occurrenceIdRegex}/).nil?
-        @specific_occurrence = strippedLVN[occIndex]
-        specific_def = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="OCCR"]', HQMF2::Document::NAMESPACES)
-        if specific_def
-          @source_data_criteria = "#{HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@extension')}_#{HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@root')}"
-          @source_data_criteria_root = ''
-          @occurrences_map[@source_data_criteria ] ||= @specific_occurrence
-        else
-          @source_data_criteria = "#{attr_val('./*/cda:id/@extension')}_#{attr_val('./*/cda:id/@root')}"
-          @occurrences_map[@source_data_criteria]  ||= @specific_occurrence
-          @source_data_criteria_root = ''
-        end
-        return
-      end
-
       specific_def = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="OCCR"]', HQMF2::Document::NAMESPACES)
       source_def = @entry.at_xpath('./*/cda:outboundRelationship[cda:subsetCode/@code="SOURCE"]', HQMF2::Document::NAMESPACES)
       if specific_def
@@ -621,11 +598,19 @@ module HQMF2
         @specific_occurrence_const = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationRoot')
         @specific_occurrence = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationExtension')
 
+        occurrence_criteria = @data_criteria_references[strip_tokens "#{@source_data_criteria_extension}_#{@source_data_criteria_root}"]
+
+        return if occurrence_criteria.nil?
+
         # FIXME: Remove debug statements after cleaning up occurrence handling
         # build regex for extracting alpha-index of specific occurrences
+        isVariable = extract_variable
         occurrenceLVNRegex = isVariable ? 'occ[A-Z]of_' : 'Occurrence[A-Z]of'
+        occurrenceIdRegex = isVariable ? 'occ[A-Z]of_' : 'Occurrence[A-Z]_'
         occurrenceIdentifier = ""
+        occIndex = isVariable ? 3 : 10
         strippedSDC = strip_tokens @source_data_criteria_extension
+        strippedLVN = strip_tokens @local_variable_name
         strippedId = strip_tokens @id
 
         # TODO: What should happen is neither @id or @lvn has occurrence label?
