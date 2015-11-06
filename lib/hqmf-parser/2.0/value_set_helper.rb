@@ -1,5 +1,6 @@
 module HQMF2
   class ValueSetHelper
+    # rubocop:disable Metrics/LineLength, Style/StringLiterals, Style/SpaceInsideHashLiteralBraces, Style/SpaceAfterColon
     VALUESET_MAP = {
       "2.16.840.1.113883.10.20.28.3.7" => {valueset_path:"./*/cda:value", result_path: nil },
       "2.16.840.1.113883.10.20.28.3.8" => {valueset_path:"./*/cda:code", result_path: nil },
@@ -48,7 +49,7 @@ module HQMF2
       "2.16.840.1.113883.10.20.28.3.52" => {valueset_path:"./*/cda:value", result_path: nil },
       "2.16.840.1.113883.10.20.28.3.53" => {valueset_path:"./*/cda:code", result_path: "./*/cda:value"},
       "2.16.840.1.113883.10.20.28.3.6" => {valueset_path:"./*/cda:value", result_path: nil },
-      "2.16.840.1.113883.10.20.28.3.54" => {valueset_path: nil,  result_path: nil },
+      "2.16.840.1.113883.10.20.28.3.54" => {valueset_path: nil, result_path: nil },
       "2.16.840.1.113883.10.20.28.3.56" => {valueset_path:"./*/cda:value", result_path: nil },
       "2.16.840.1.113883.10.20.28.3.57" => {valueset_path:"./*/cda:value", result_path: nil },
       "2.16.840.1.113883.10.20.28.3.58" => {valueset_path:"./*/cda:value", result_path: nil },
@@ -88,6 +89,7 @@ module HQMF2
       "2.16.840.1.113883.10.20.28.3.115" => {valueset_path:"./*/cda:participation[@typeCode='CSM']/cda:role/cda:playingManufacturedMaterial[@classCode='MMAT']/cda:code", result_path: nil },
       "2.16.840.1.113883.10.20.28.3.116" => {valueset_path:"./*/cda:value", result_path: nil }
     }
+    # rubocop:enable Metrics/LineLength, Style/StringLiterals, Style/SpaceInsideHashLiteralBraces, Style/SpaceAfterColon
     def self.get_mapping_for_template(template)
       VALUESET_MAP[template]
     end
