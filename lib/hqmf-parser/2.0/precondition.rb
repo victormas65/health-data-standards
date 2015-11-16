@@ -45,7 +45,8 @@ module HQMF2
       # Return the proper precondition given if a negation exists
       if negation
         # Wrap the negation in a seperate precondition which this will reference
-        new(id_generator.next_id, conjunction, [new(id_generator.next_id, conjunction, preconditions, true, reference)])
+        precondition_wrapper = new(id_generator.next_id, conjunction, preconditions, true, reference)
+        new(id_generator.next_id, conjunction, [precondition_wrapper])
       else
         new(id_generator.next_id, conjunction, preconditions, false, reference)
       end
