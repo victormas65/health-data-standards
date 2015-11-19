@@ -19,8 +19,9 @@ module HQMF2
     end
 
     def self.strip_non_sc_elements(dc)
-      dc.instance_variable_set(:@definition, 'derived') if [HQMF::DataCriteria::SATISFIES_ANY, HQMF::DataCriteria::SATISFIES_ALL].include? dc.definition
-
+      if [HQMF::DataCriteria::SATISFIES_ANY, HQMF::DataCriteria::SATISFIES_ALL].include? dc.definition
+        dc.instance_variable_set(:@definition, 'derived')
+      end
       dc.instance_variable_set(:@source_data_criteria, dc.id)
       dc.instance_variable_set(:@field_values, {})
       dc.instance_variable_set(:@temporal_references, [])

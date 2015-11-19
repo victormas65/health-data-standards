@@ -19,7 +19,6 @@ module HQMF2
       fields
     end
 
-    # rubocop:disable Metrics/CyclomaticComplexity
     def self.handle_fields_per_criteria(criteria, fields)
       case criteria.name
       when 'encounterCriteria'
@@ -38,7 +37,6 @@ module HQMF2
         parse_grouper_fields(criteria, fields)
       end
     end
-    # rubocop:enable Metrics/CyclomaticComplexity
 
     def self.parse_dset_cd(element, field, fields)
       if element
@@ -155,16 +153,20 @@ module HQMF2
     def self.parse_observation_fields(entry, fields)
       parse_dset_cd(entry.at_xpath('./cda:methodCode', HQMF2::Document::NAMESPACES), 'METHOD', fields)
       parse_dset_cd(entry.at_xpath('./cda:targetSiteCode', HQMF2::Document::NAMESPACES), 'ANATOMICAL_LOCATION_SITE', fields)
-      parse_cd(entry.at_xpath("./cda:participation[@typeCode='SBJ']/cda:role[@classCode='PRS']/cda:code", HQMF2::Document::NAMESPACES), 'RELATIONSHIP', fields)
+      parse_cd(entry.at_xpath("./cda:participation[@typeCode='SBJ']/cda:role[@classCode='PRS']/cda:code", HQMF2::Document::NAMESPACES),
+               'RELATIONSHIP', fields)
       parse_pq(entry.at_xpath("./cda:outboundRelationship[@typeCode='REFV']/cda:observationCriteria/cda:value/cda:high", HQMF2::Document::NAMESPACES),
                'REFERENCE_RANGE_HIGH', fields)
       parse_pq(entry.at_xpath("./cda:outboundRelationship[@typeCode='REFV']/cda:observationCriteria/cda:value/cda:low", HQMF2::Document::NAMESPACES),
                'REFERENCE_RANGE_LOW', fields)
     end
 
+    # Ignoring line limits here as it would be hard to create the deep xPaths with these limits.
+    # rubocop:disable Metrics/LineLength
     def self.parse_encounter_fields(entry, fields)
       # Added a check for Principal Diagnosis and Diagnosis. QDM 4.2 Update
-      principal = entry.at_xpath("./cda:outboundRelationship[@typeCode='REFR']/cda:actCriteria/cda:code[@code='52534-5']", HQMF2::Document::NAMESPACES)
+      principal = entry.at_xpath("./cda:outboundRelationship[@typeCode='REFR']/cda:actCriteria/cda:code[@code='52534-5']",
+                                 HQMF2::Document::NAMESPACES)
       if principal
         parse_cd(
           entry.at_xpath(
@@ -187,6 +189,7 @@ module HQMF2
 
       handle_loc(entry, fields)
     end
+    # rubocop:endable Metrics/LineLength
 
     def self.handle_loc(entry, fields)
       loc = entry.at_xpath("./cda:participation[@typeCode='LOC']/cda:role[@classCode='SDLOC']", HQMF2::Document::NAMESPACES)
