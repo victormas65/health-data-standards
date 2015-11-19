@@ -148,26 +148,7 @@ module HQMF2
       when nil
         definition_for_nil_entry
       else
-        @definition = extract_definition_from_entry_type(entry_type)
-      end
-    end
-
-    def extract_definition_from_entry_type(entry_type)
-      case entry_type
-      when 'Problem', 'Problems'
-        'diagnosis'
-      when 'Encounter', 'Encounters'
-        'encounter'
-      when 'LabResults', 'Results'
-        'laboratory_test'
-      when 'Procedure', 'Procedures'
-        'procedure'
-      when 'Demographics'
-        definition_for_demographic
-      when 'Derived'
-        'derived'
-      else
-        fail "Unknown data criteria template identifier [#{entry_type}]"
+        @definition = DataCriteriaMethods.extract_definition_from_entry_type(entry_type)
       end
     end
 
@@ -233,25 +214,27 @@ module HQMF2
           @status = defs['status'].length > 0 ? defs['status'] : nil
           found ||= true
         else
-          found ||= extract_type_from_specific_template_id(template_id)
+          found ||= extract_type_from_known_template_id(template_id)
         end
       end
 
       found
     end
 
-    def extract_type_from_specific_template_id(template_id)
-      @negation = false
+    def extract_type_from_known_template_id(template_id)
       case template_id
       when VARIABLE_TEMPLATE
         @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
         @definition ||= 'derived'
         @variable = true
+        @negation = false
       when SATISFIES_ANY_TEMPLATE
         @definition = HQMF::DataCriteria::SATISFIES_ANY
+        @negation = false
       when SATISFIES_ALL_TEMPLATE
         @definition = HQMF::DataCriteria::SATISFIES_ALL
         @derivation_operator = HQMF::DataCriteria::INTERSECT
+        @negation = false
       else
         return false
       end
@@ -477,10 +460,10 @@ module HQMF2
 
         # FIXME: Remove debug statements after cleaning up occurrence handling
         # build regex for extracting alpha-index of specific occurrences
-        occurrence_identifier = obtain_occurrence_identifier(strip_tokens(@id),
-                                                             strip_tokens(@local_variable_name) || '',
-                                                             strip_tokens(@source_data_criteria_extension),
-                                                             is_variable)
+        occurrence_identifier = DataCriteriaMethods.obtain_occurrence_identifier(strip_tokens(@id),
+                                                                                 strip_tokens(@local_variable_name) || '',
+                                                                                 strip_tokens(@source_data_criteria_extension),
+                                                                                 is_variable)
 
         handle_specific_and_source(occurrence_identifier, is_variable)
 
@@ -514,39 +497,6 @@ module HQMF2
 
       @specific_occurrence = 'A' unless @specific_occurrence
       @specific_occurrence_const = @source_data_criteria.upcase unless @specific_occurrence_const
-    end
-
-    def obtain_occurrence_identifier(stripped_id, stripped_lvn, stripped_sdc, is_variable)
-      if is_variable
-        occurrence_lvn_regex = 'occ[A-Z]of_'
-        occurrence_id_regex = 'occ[A-Z]of_'
-        occ_index = 3
-        return handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
-      else
-        occurrence_lvn_regex = 'Occurrence[A-Z]of'
-        occurrence_id_regex = 'Occurrence[A-Z]_'
-        occ_index = 10
-      end
-      # TODO: What should happen is neither @id or @lvn has occurrence label?
-      # puts "Checking #{"#{occurrence_id_regex}#{stripped_sdc}"} against #{stripped_id}"
-      # puts "Checking #{"#{occurrence_lvn_regex}#{stripped_sdc}"} against #{stripped_lvn}"
-      if stripped_id.match(/^#{occurrence_id_regex}#{stripped_sdc}/)
-        return stripped_id[occ_index]
-      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}#{stripped_sdc}/)
-        return stripped_lvn[occ_index]
-      end
-
-      stripped_sdc[occ_index] if stripped_sdc.match(
-        /(^#{occurrence_id_regex}| ^#{occurrence_id_regex}qdm_var_| ^#{occurrence_lvn_regex})| ^#{occurrence_lvn_regex}qdm_var_/)
-    end
-
-    def handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
-      # TODO: Handle specific occurrences of variables that don't self-reference?
-      if stripped_id.match(/^#{occurrence_id_regex}qdm_var_/)
-        return stripped_id[occ_index]
-      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}qdm_var/)
-        return stripped_lvn[occ_index]
-      end
     end
 
     def handle_specific_variables
@@ -634,8 +584,97 @@ module HQMF2
       end
     end
 
+    # Extract the description, with some special handling if this is a variable; the MAT has added an encoded
+    # form of the variable name in the localVariableName field, if that's available use it; if not, fall back
+    # to the extension
+    def extract_description
+      if extract_variable
+        encoded_name = attr_val('./cda:localVariableName/@value')
+        encoded_name = DataCriteriaMethods.extract_description_for_variable(encoded_name) if encoded_name
+        return encoded_name if encoded_name.present?
+        attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
+      else
+        attr_val("./#{CRITERIA_GLOB}/cda:text/@value") ||
+          attr_val("./#{CRITERIA_GLOB}/cda:title/@value") ||
+          attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
+      end
+    end
+
+    # Determine if this instance is a qdm variable
+    def extract_variable
+      variable = !(@local_variable_name =~ /.*qdm_var_/).nil? unless @local_variable_name.blank?
+      variable ||= !(@id =~ /.*qdm_var_/).nil? unless @id.blank?
+      variable
+    end
+
+    def extract_template_ids
+      @entry.xpath('./*/cda:templateId/cda:item', HQMF2::Document::NAMESPACES).collect do |template_def|
+        HQMF2::Utilities.attr_val(template_def, '@root')
+      end
+    end
+  end
+
+  # Handles various tasks that the Data Criteria needs performed to obtain and
+  # modify secific occurrences
+  class SpecificOccurrence
+  end
+
+  # Handles performance of methods not tied to the data criteria's instance vairables
+  class DataCriteriaMethods
+    def self.extract_definition_from_entry_type(entry_type)
+      case entry_type
+      when 'Problem', 'Problems'
+        'diagnosis'
+      when 'Encounter', 'Encounters'
+        'encounter'
+      when 'LabResults', 'Results'
+        'laboratory_test'
+      when 'Procedure', 'Procedures'
+        'procedure'
+      when 'Demographics'
+        definition_for_demographic
+      when 'Derived'
+        'derived'
+      else
+        fail "Unknown data criteria template identifier [#{entry_type}]"
+      end
+    end
+
+    def self.obtain_occurrence_identifier(stripped_id, stripped_lvn, stripped_sdc, is_variable)
+      if is_variable
+        occurrence_lvn_regex = 'occ[A-Z]of_'
+        occurrence_id_regex = 'occ[A-Z]of_'
+        occ_index = 3
+        return handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
+      else
+        occurrence_lvn_regex = 'Occurrence[A-Z]of'
+        occurrence_id_regex = 'Occurrence[A-Z]_'
+        occ_index = 10
+      end
+      # TODO: What should happen is neither @id or @lvn has occurrence label?
+      # puts "Checking #{"#{occurrence_id_regex}#{stripped_sdc}"} against #{stripped_id}"
+      # puts "Checking #{"#{occurrence_lvn_regex}#{stripped_sdc}"} against #{stripped_lvn}"
+      if stripped_id.match(/^#{occurrence_id_regex}#{stripped_sdc}/)
+        return stripped_id[occ_index]
+      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}#{stripped_sdc}/)
+        return stripped_lvn[occ_index]
+      end
+
+      stripped_sdc[occ_index] if stripped_sdc.match(
+        /(^#{occurrence_id_regex}| ^#{occurrence_id_regex}qdm_var_| ^#{occurrence_lvn_regex})| ^#{occurrence_lvn_regex}qdm_var_/)
+    end
+
+    def self.handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
+      # TODO: Handle specific occurrences of variables that don't self-reference?
+      if stripped_id.match(/^#{occurrence_id_regex}qdm_var_/)
+        return stripped_id[occ_index]
+      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}qdm_var/)
+        return stripped_lvn[occ_index]
+      end
+    end
+
     # Return the definitino for a known subset of patient characteristics
-    def definition_for_demographic
+    def self.definition_for_demographic
       demographic_type = attr_val('./cda:observationCriteria/cda:code/@code')
       demographic_translation = {
         '21112-8' => 'patient_characteristic_birthdate',
@@ -652,23 +691,7 @@ module HQMF2
       end
     end
 
-    # Extract the description, with some special handling if this is a variable; the MAT has added an encoded
-    # form of the variable name in the localVariableName field, if that's available use it; if not, fall back
-    # to the extension
-    def extract_description
-      if extract_variable
-        encoded_name = attr_val('./cda:localVariableName/@value')
-        encoded_name = extract_description_for_variable(encoded_name) if encoded_name
-        return encoded_name if encoded_name.present?
-        attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
-      else
-        attr_val("./#{CRITERIA_GLOB}/cda:text/@value") ||
-          attr_val("./#{CRITERIA_GLOB}/cda:title/@value") ||
-          attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
-      end
-    end
-
-    def extract_description_for_variable(encoded_name)
+    def self.extract_description_for_variable(encoded_name)
       if encoded_name.match(/^qdm_var_/)
         # Strip out initial qdm_var_ string, trailing _*, and possible occurrence reference
         encoded_name.gsub!(/^qdm_var_|/, '')
@@ -681,19 +704,6 @@ module HQMF2
       elsif encoded_name.match(/^localVar_/)
         encoded_name.gsub!(/^localVar_/, '')
         encoded_name
-      end
-    end
-
-    # Determine if this instance is a qdm variable
-    def extract_variable
-      variable = !(@local_variable_name =~ /.*qdm_var_/).nil? unless @local_variable_name.blank?
-      variable ||= !(@id =~ /.*qdm_var_/).nil? unless @id.blank?
-      variable
-    end
-
-    def extract_template_ids
-      @entry.xpath('./*/cda:templateId/cda:item', HQMF2::Document::NAMESPACES).collect do |template_def|
-        HQMF2::Utilities.attr_val(template_def, '@root')
       end
     end
   end
