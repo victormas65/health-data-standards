@@ -1,241 +1,4 @@
 module HQMF2
-  # Extracts the type, and modifies the data criteria, based on teh template id or definition
-  module DataCriteriaTypeAndDefinitionExtraction
-    VARIABLE_TEMPLATE = '0.1.2.3.4.5.6.7.8.9.1'
-    SATISFIES_ANY_TEMPLATE = '2.16.840.1.113883.10.20.28.3.108'
-    SATISFIES_ALL_TEMPLATE = '2.16.840.1.113883.10.20.28.3.109'
-    def extract_type_from_template_or_definition
-      # Try to determine what kind of data criteria we are dealing with
-      # First we look for a template id and if we find one just use the definition
-      # status and negation associated with that
-      # If no template id or not one we recognize then try to determine type from
-      # the definition element
-      extract_type_from_definition unless extract_type_from_template_id
-    end
-
-    def extract_type_from_definition
-      # if we have a specific occurrence of a variable, pull attributes from the reference
-      extract_type_from_specific_variable if @variable && @specific_occurrence
-
-      if @entry.at_xpath('./cda:grouperCriteria')
-        @definition ||= 'derived'
-        return
-      end
-      # See if we can find a match for the entry definition value and status.
-      entry_type = attr_val('./*/cda:definition/*/cda:id/@extension')
-      handle_entry_type(entry_type)
-    end
-
-    def extract_type_from_specific_variable
-      reference = @entry.at_xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
-      if reference
-        ref_id = strip_tokens(
-          "#{HQMF2::Utilities.attr_val(reference, 'cda:id/@extension')}_#{HQMF2::Utilities.attr_val(reference, 'cda:id/@root')}")
-      end
-      reference_criteria = @data_criteria_references[ref_id] if ref_id
-      # if the reference is derived, pull from the original variable
-      reference_criteria = @data_criteria_references["GROUP_#{ref_id}"] if reference_criteria && reference_criteria.definition == 'derived'
-      return unless reference_criteria
-      handle_specific_variable_ref(reference_criteria)
-    end
-
-    def handle_specific_variable_ref(reference_criteria)
-      # if there are no referenced children, then it's a variable representing
-      # a single data criteria, so just reference it
-      if reference_criteria.children_criteria.empty?
-        @children_criteria = [reference_criteria.id]
-      # otherwise pull all the data criteria info from the reference
-      else
-        @field_values = reference_criteria.field_values
-        @temporal_references = reference_criteria.temporal_references
-        @subset_operators = reference_criteria.subset_operators
-        @derivation_operator = reference_criteria.derivation_operator
-        @definition = reference_criteria.definition
-        @description = reference_criteria.description
-        @status = reference_criteria.status
-        @children_criteria = reference_criteria.children_criteria
-      end
-    end
-
-    def handle_entry_type(entry_type)
-      # settings is required to trigger exceptions, which set the definition
-      HQMF::DataCriteria.get_settings_for_definition(entry_type, @status)
-      @definition = entry_type
-    rescue
-      # if no exact match then try a string match just using entry definition value
-      case entry_type
-      when 'Medication', 'Medications'
-        @definition = 'medication'
-        @status = 'active' unless @status
-      when 'RX'
-        @definition = 'medication'
-        @status = 'dispensed' unless @status
-      when nil
-        definition_for_nil_entry
-      else
-        @definition = extract_definition_from_entry_type(entry_type)
-      end
-    end
-
-    def definition_for_nil_entry
-      reference = @entry.at_xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
-      ref_id = nil
-      unless reference.nil?
-        ref_id = "#{HQMF2::Utilities.attr_val(reference, 'cda:id/@extension')}_#{HQMF2::Utilities.attr_val(reference, 'cda:id/@root')}"
-      end
-      reference_criteria = @data_criteria_references[strip_tokens(ref_id)] unless ref_id.nil?
-      if reference_criteria
-        @definition = reference_criteria.definition
-        @status = reference_criteria.status
-        if @specific_occurrence
-          @title = reference_criteria.title
-          @description = reference_criteria.description
-          @code_list_id = reference_criteria.code_list_id
-        end
-      else
-        puts "MISSING_DC_REF: #{ref_id}" unless @variable
-        @definition = 'variable'
-      end
-    end
-
-    def extract_type_from_template_id
-      found = false
-
-      @template_ids.each do |template_id|
-        defs = HQMF::DataCriteria.definition_for_template_id(template_id, 'r2')
-        if defs
-          @definition = defs['definition']
-          @status = defs['status'].length > 0 ? defs['status'] : nil
-          found ||= true
-        else
-          found ||= extract_type_from_known_template_id(template_id)
-        end
-      end
-
-      found
-    end
-
-    def extract_definition_from_entry_type(entry_type)
-      case entry_type
-      when 'Problem', 'Problems'
-        'diagnosis'
-      when 'Encounter', 'Encounters'
-        'encounter'
-      when 'LabResults', 'Results'
-        'laboratory_test'
-      when 'Procedure', 'Procedures'
-        'procedure'
-      when 'Demographics'
-        definition_for_demographic
-      when 'Derived'
-        'derived'
-      else
-        fail "Unknown data criteria template identifier [#{entry_type}]"
-      end
-    end
-
-    # Return the definition for a known subset of patient characteristics
-    def definition_for_demographic
-      demographic_type = attr_val('./cda:observationCriteria/cda:code/@code')
-      demographic_translation = {
-        '21112-8' => 'patient_characteristic_birthdate',
-        '424144002' => 'patient_characteristic_age',
-        '263495000' => 'patient_characteristic_gender',
-        '102902016' => 'patient_characteristic_languages',
-        '125680007' => 'patient_characteristic_marital_status',
-        '103579009' => 'patient_characteristic_race'
-      }
-      if demographic_translation[demographic_type]
-        demographic_translation[demographic_type]
-      else
-        fail "Unknown demographic identifier [#{demographic_type}]"
-      end
-    end
-
-    def extract_type_from_known_template_id(template_id)
-      case template_id
-      when VARIABLE_TEMPLATE
-        @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
-        @definition ||= 'derived'
-        @variable = true
-        @negation = false
-      when SATISFIES_ANY_TEMPLATE
-        @definition = HQMF::DataCriteria::SATISFIES_ANY
-        @negation = false
-      when SATISFIES_ALL_TEMPLATE
-        @definition = HQMF::DataCriteria::SATISFIES_ALL
-        @derivation_operator = HQMF::DataCriteria::INTERSECT
-        @negation = false
-      else
-        return false
-      end
-      true
-    end
-  end
-
-  # Processing on data criteria after the initial extractions have taken place
-  module DataCriteriaPostProcessing
-    # Handles settings values after (most) values have been setup
-    def post_processing
-      set_code_list_path_and_result_value
-
-      # prefix ids that start with numerical values, and strip tokens from others
-      @id = strip_tokens @id
-      @children_criteria.map! { |cc| strip_tokens cc }
-
-      #### prefix!!!!!!!!!
-
-      @source_data_criteria = strip_tokens(@source_data_criteria) unless @source_data_criteria.nil?
-      @specific_occurrence_const = strip_tokens(@specific_occurrence_const) unless @specific_occurrence_const.nil?
-      set_intersection
-      handle_specific_variables
-    end
-
-    def handle_variable_subsets
-      is_grouper = @entry.at_xpath('./cda:grouperCriteria')
-      references = @entry.xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
-      reference = references.first
-      # Variables should now always handled as verbose
-      return unless references.try(:length) == 1
-      ref_id = strip_tokens("#{HQMF2::Utilities.attr_val(reference, 'cda:id/@extension')}_#{HQMF2::Utilities.attr_val(reference, 'cda:id/@root')}")
-      reference_criteria = @data_criteria_references[ref_id] if ref_id
-      return if is_grouper.nil? || !reference_criteria.try(:variable)
-      id_extension_xpath = './*/cda:id/@extension'
-      return unless (attr_val(id_extension_xpath) =~ /^occ[A-Z]of_qdm_var_/).nil?
-      @verbose_reference = true
-    end
-
-    def set_code_list_path_and_result_value
-      if @template_ids.empty? && @specific_occurrence
-        template = @entry.document.at_xpath(
-          "//cda:id[@root='#{@source_data_criteria_root}' and @extension='#{@source_data_criteria_extension}']/../cda:templateId/cda:item/@root")
-        if template
-          mapping = ValueSetHelper.get_mapping_for_template(template.to_s)
-          handle_mapping_template(mapping)
-        end
-      end
-      @template_ids.each do |t|
-        mapping = ValueSetHelper.get_mapping_for_template(t)
-        handle_mapping_template(mapping)
-      end
-    end
-
-    def handle_mapping_template(mapping)
-      if mapping
-        @code_list_xpath = mapping[:valueset_path] if mapping[:valueset_path] && @entry.at_xpath(mapping[:valueset_path])
-        @value = DataCriteriaMethods.parse_value(@entry, mapping[:result_path]) if mapping[:result_path]
-      end
-    end
-
-    def set_intersection
-      # Need to handle grouper criteria that do not have template ids -- these will be union of and intersection criteria
-      return unless @template_ids.empty?
-      # Change the XPRODUCT to an INTERSECT otherwise leave it as a UNION
-      @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
-      @description ||= (@derivation_operator == HQMF::DataCriteria::INTERSECT) ? 'Intersect' : 'Union'
-    end
-  end
-
   # Represents a data criteria specification
   class DataCriteria
     include HQMF2::Utilities, HQMF2::DataCriteriaTypeAndDefinitionExtraction, HQMF2::DataCriteriaPostProcessing
@@ -270,24 +33,6 @@ module HQMF2
       post_processing
     end
 
-    def basic_setup
-      @status = attr_val('./*/cda:statusCode/@code')
-      @id_xpath = './*/cda:id/@extension'
-      @id = "#{attr_val('./*/cda:id/@extension')}_#{attr_val('./*/cda:id/@root')}"
-      @comments = @entry.xpath("./#{CRITERIA_GLOB}/cda:text/cda:xml/cda:qdmUserComments/cda:item/text()", HQMF2::Document::NAMESPACES).map(&:content)
-      @code_list_xpath = './*/cda:code'
-      @value_xpath = './*/cda:value'
-      @do_not_group = false
-      simple_extractions = DataCriteriaBaseExtractions.new(@entry)
-      @template_ids = simple_extractions.extract_template_ids
-      @local_variable_name = simple_extractions.extract_local_variable_name
-      @temporal_references = simple_extractions.extract_temporal_references
-      @derivation_operator = simple_extractions.extract_derivation_operator
-      @children_criteria = simple_extractions.extract_child_criteria
-      @subset_operators = simple_extractions.extract_subset_operators
-      @negation, @negation_code_list_id = simple_extractions.extract_negation
-    end
-
     def to_s
       props = {
         property: property,
@@ -316,17 +61,6 @@ module HQMF2
     # @return [String] the code list identifier of this data criteria
     def code_list_id
       @code_list_id || attr_val("#{@code_list_xpath}/@valueSet")
-    end
-
-    def inline_code_list
-      code_system = attr_val("#{@code_list_xpath}/@codeSystem")
-      if code_system
-        code_system_name = HealthDataStandards::Util::CodeSystemHelper.code_system_for(code_system)
-      else
-        code_system_name = attr_val("#{@code_list_xpath}/@codeSystemName")
-      end
-      code_value = attr_val("#{@code_list_xpath}/@code")
-      { code_system_name => [code_value] } if code_system_name && code_value
     end
 
     def to_model
@@ -389,6 +123,35 @@ module HQMF2
 
     private
 
+    def basic_setup
+      @status = attr_val('./*/cda:statusCode/@code')
+      @id_xpath = './*/cda:id/@extension'
+      @id = "#{attr_val('./*/cda:id/@extension')}_#{attr_val('./*/cda:id/@root')}"
+      @comments = @entry.xpath("./#{CRITERIA_GLOB}/cda:text/cda:xml/cda:qdmUserComments/cda:item/text()", HQMF2::Document::NAMESPACES).map(&:content)
+      @code_list_xpath = './*/cda:code'
+      @value_xpath = './*/cda:value'
+      @do_not_group = false
+      simple_extractions = DataCriteriaBaseExtractions.new(@entry)
+      @template_ids = simple_extractions.extract_template_ids
+      @local_variable_name = simple_extractions.extract_local_variable_name
+      @temporal_references = simple_extractions.extract_temporal_references
+      @derivation_operator = simple_extractions.extract_derivation_operator
+      @children_criteria = simple_extractions.extract_child_criteria
+      @subset_operators = simple_extractions.extract_subset_operators
+      @negation, @negation_code_list_id = simple_extractions.extract_negation
+    end
+
+    def inline_code_list
+      code_system = attr_val("#{@code_list_xpath}/@codeSystem")
+      if code_system
+        code_system_name = HealthDataStandards::Util::CodeSystemHelper.code_system_for(code_system)
+      else
+        code_system_name = attr_val("#{@code_list_xpath}/@codeSystemName")
+      end
+      code_value = attr_val("#{@code_list_xpath}/@code")
+      { code_system_name => [code_value] } if code_system_name && code_value
+    end
+
     def handle_do_not_group
       if !@data_criteria_references["GROUP_#{@children_criteria.first}"].nil? && @children_criteria.length == 1
         @children_criteria[0] = "GROUP_#{@children_criteria.first}"
@@ -445,21 +208,6 @@ module HQMF2
       @description = "#{@description}: #{exact_desc}"
     end
 
-    def handle_specific_variables
-      return unless @definition == 'derived'
-      # Adds a child if none exists (specifically the source criteria)
-      @children_criteria << @source_data_criteria if @children_criteria.empty?
-      return if @children_criteria.length != 1 || (@source_data_criteria.present? && @children_criteria.first != @source_data_criteria)
-      # if child.first is nil, it will be caught in the second statement
-      reference_criteria = @data_criteria_references[@children_criteria.first]
-      return if reference_criteria.nil?
-      @do_not_group = true # easier to track than all testing all features of these cases
-      @subset_operators ||= reference_criteria.subset_operators
-      @derivation_operator ||= reference_criteria.derivation_operator
-      @description = reference_criteria.description
-      @variable = reference_criteria.variable
-    end
-
     # Extract the description, with some special handling if this is a variable; the MAT has added an encoded
     # form of the variable name in the localVariableName field, if that's available use it; if not, fall back
     # to the extension
@@ -477,179 +225,7 @@ module HQMF2
     end
   end
 
-  # Contains straightforward extractions needed by the DataCriteria
-  class DataCriteriaBaseExtractions
-    include HQMF2::Utilities
-    CONJUNCTION_CODE_TO_DERIVATION_OP = {
-      'OR' => 'UNION',
-      'AND' => 'XPRODUCT'
-    }
-
-    def initialize(entry)
-      @entry = entry
-    end
-
-    def extract_local_variable_name
-      lvn = @entry.at_xpath('./cda:localVariableName')
-      lvn['value'] if lvn
-    end
-
-    def extract_child_criteria
-      @entry.xpath("./*/cda:outboundRelationship[@typeCode='COMP']/cda:criteriaReference/cda:id", HQMF2::Document::NAMESPACES).collect do |ref|
-        Reference.new(ref).id
-      end.compact
-    end
-
-    def extract_derivation_operator
-      codes = @entry.xpath("./*/cda:outboundRelationship[@typeCode='COMP']/cda:conjunctionCode/@code", HQMF2::Document::NAMESPACES)
-      codes.inject(nil) do |d_op, code|
-        fail 'More than one derivation operator in data criteria' if d_op && d_op != CONJUNCTION_CODE_TO_DERIVATION_OP[code.value]
-        CONJUNCTION_CODE_TO_DERIVATION_OP[code.value]
-      end
-    end
-
-    def extract_temporal_references
-      @entry.xpath('./*/cda:temporallyRelatedInformation', HQMF2::Document::NAMESPACES).collect do |temporal_reference|
-        TemporalReference.new(temporal_reference)
-      end
-    end
-
-    def extract_subset_operators
-      all_subset_operators.select do |operator|
-        operator.type != 'UNION' && operator.type != 'XPRODUCT'
-      end
-    end
-
-    def all_subset_operators
-      @entry.xpath('./*/cda:excerpt', HQMF2::Document::NAMESPACES).collect do |subset_operator|
-        SubsetOperator.new(subset_operator)
-      end
-    end
-
-    def extract_template_ids
-      @entry.xpath('./*/cda:templateId/cda:item', HQMF2::Document::NAMESPACES).collect do |template_def|
-        HQMF2::Utilities.attr_val(template_def, '@root')
-      end
-    end
-
-    def extract_negation
-      negation = (attr_val('./*/@actionNegationInd') == 'true')
-      if negation
-        res = @entry.at_xpath('./*/cda:outboundRelationship/*/cda:code[@code="410666004"]/../cda:value/@valueSet', HQMF2::Document::NAMESPACES)
-        negation_code_list_id = res.value if res
-      else
-        negation_code_list_id = nil
-      end
-      [negation, negation_code_list_id]
-    end
-  end
-
-  # Handles various tasks that the Data Criteria needs performed to obtain and
-  # modify secific occurrences
-  class SpecificOccurrenceAndSource
-    include HQMF2::Utilities
-
-    def initialize(entry, id, local_variable_name, data_criteria_references, occurrences_map)
-      @entry = entry
-      @id = id
-      @local_variable_name = local_variable_name
-      @occurrences_map = occurrences_map
-      @is_variable = DataCriteriaMethods.extract_variable(@local_variable_name, @id)
-      @data_criteria_references = data_criteria_references
-    end
-
-    def extract_specific_and_source
-      specific_def = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="OCCR"]', HQMF2::Document::NAMESPACES)
-      source_def = @entry.at_xpath('./*/cda:outboundRelationship[cda:subsetCode/@code="SOURCE"]', HQMF2::Document::NAMESPACES)
-      if specific_def
-        source_data_criteria_extension = HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@extension')
-        source_data_criteria_root = HQMF2::Utilities.attr_val(specific_def, './cda:criteriaReference/cda:id/@root')
-
-        occurrence_criteria = @data_criteria_references[strip_tokens "#{source_data_criteria_extension}_#{source_data_criteria_root}"]
-
-        return if occurrence_criteria.nil?
-        specific_occurrence_const = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationRoot')
-        specific_occurrence = HQMF2::Utilities.attr_val(specific_def, './cda:localVariableName/@controlInformationExtension')
-
-        # FIXME: Remove debug statements after cleaning up occurrence handling
-        # build regex for extracting alpha-index of specific occurrences
-        occurrence_identifier = obtain_occurrence_identifier(strip_tokens(@id),
-                                                             strip_tokens(@local_variable_name) || '',
-                                                             strip_tokens(source_data_criteria_extension),
-                                                             @is_variable)
-
-        handle_specific_and_source(occurrence_identifier, source_data_criteria_extension, source_data_criteria_root,
-                                   specific_occurrence_const, specific_occurrence)
-
-      elsif source_def
-        extension = HQMF2::Utilities.attr_val(source_def, './cda:criteriaReference/cda:id/@extension')
-        root = HQMF2::Utilities.attr_val(source_def, './cda:criteriaReference/cda:id/@root')
-        ["#{extension}_#{root}"] # return the soruce data criteria itself, the rest will be blank
-      end
-    end
-
-    # Handle setting the specific and source instance variables with a given occurrence identifier
-    def handle_specific_and_source(occurrence_identifier, source_data_criteria_extension, source_data_criteria_root,
-                                   specific_occurrence_const, specific_occurrence)
-      source_data_criteria = "#{source_data_criteria_extension}_#{source_data_criteria_root}"
-      if !occurrence_identifier.blank?
-        # if it doesn't exist, add extracted occurrence to the map
-        # puts "\tSetting #{@source_data_criteria}-#{@source_data_criteria_root} to #{occurrence_identifier}"
-        @occurrences_map[source_data_criteria] ||= occurrence_identifier
-        specific_occurrence ||= occurrence_identifier
-        specific_occurrence_const = "#{source_data_criteria}".upcase
-      else
-        # create variable occurrences that do not already exist
-        if @is_variable
-          # puts "\tSetting #{@source_data_criteria}-#{@source_data_criteria_root} to #{occurrence_identifier}"
-          @occurrences_map[source_data_criteria] ||= occurrence_identifier
-        end
-        occurrence = @occurrences_map.try(:[], source_data_criteria)
-        fail "Could not find occurrence mapping for #{source_data_criteria}, #{source_data_criteria_root}" unless occurrence
-        # puts "\tUsing #{occurrence} for #{@id}"
-        specific_occurrence ||= occurrence
-      end
-
-      specific_occurrence = 'A' unless specific_occurrence
-      specific_occurrence_const = source_data_criteria.upcase unless specific_occurrence_const
-      [source_data_criteria, source_data_criteria_root, source_data_criteria_extension, specific_occurrence, specific_occurrence_const]
-    end
-
-    def obtain_occurrence_identifier(stripped_id, stripped_lvn, stripped_sdc, is_variable)
-      if is_variable
-        occurrence_lvn_regex = 'occ[A-Z]of_'
-        occurrence_id_regex = 'occ[A-Z]of_'
-        occ_index = 3
-        return handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
-      else
-        occurrence_lvn_regex = 'Occurrence[A-Z]of'
-        occurrence_id_regex = 'Occurrence[A-Z]_'
-        occ_index = 10
-      end
-      # TODO: What should happen is neither @id or @lvn has occurrence label?
-      # puts "Checking #{"#{occurrence_id_regex}#{stripped_sdc}"} against #{stripped_id}"
-      # puts "Checking #{"#{occurrence_lvn_regex}#{stripped_sdc}"} against #{stripped_lvn}"
-      if stripped_id.match(/^#{occurrence_id_regex}#{stripped_sdc}/)
-        return stripped_id[occ_index]
-      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}#{stripped_sdc}/)
-        return stripped_lvn[occ_index]
-      end
-
-      stripped_sdc[occ_index] if stripped_sdc.match(
-        /(^#{occurrence_id_regex}| ^#{occurrence_id_regex}qdm_var_| ^#{occurrence_lvn_regex})| ^#{occurrence_lvn_regex}qdm_var_/)
-    end
-
-    def handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
-      # TODO: Handle specific occurrences of variables that don't self-reference?
-      if stripped_id.match(/^#{occurrence_id_regex}qdm_var_/)
-        return stripped_id[occ_index]
-      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}qdm_var/)
-        return stripped_lvn[occ_index]
-      end
-    end
-  end
-
-  # Handles performance of methods not tied to the data criteria's instance vairables
+  # Handles performance of methods not tied to the data criteria's instance variables
   class DataCriteriaMethods
     def self.extract_field_values(entry, negation)
       fields = {}
