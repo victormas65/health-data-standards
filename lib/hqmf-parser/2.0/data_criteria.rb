@@ -73,7 +73,7 @@ module HQMF2
       when nil
         definition_for_nil_entry
       else
-        @definition = DataCriteriaMethods.extract_definition_from_entry_type(entry_type)
+        @definition = extract_definition_from_entry_type(entry_type)
       end
     end
 
@@ -113,6 +113,43 @@ module HQMF2
       end
 
       found
+    end
+
+    def extract_definition_from_entry_type(entry_type)
+      case entry_type
+      when 'Problem', 'Problems'
+        'diagnosis'
+      when 'Encounter', 'Encounters'
+        'encounter'
+      when 'LabResults', 'Results'
+        'laboratory_test'
+      when 'Procedure', 'Procedures'
+        'procedure'
+      when 'Demographics'
+        definition_for_demographic
+      when 'Derived'
+        'derived'
+      else
+        fail "Unknown data criteria template identifier [#{entry_type}]"
+      end
+    end
+
+    # Return the definition for a known subset of patient characteristics
+    def definition_for_demographic
+      demographic_type = attr_val('./cda:observationCriteria/cda:code/@code')
+      demographic_translation = {
+        '21112-8' => 'patient_characteristic_birthdate',
+        '424144002' => 'patient_characteristic_age',
+        '263495000' => 'patient_characteristic_gender',
+        '102902016' => 'patient_characteristic_languages',
+        '125680007' => 'patient_characteristic_marital_status',
+        '103579009' => 'patient_characteristic_race'
+      }
+      if demographic_translation[demographic_type]
+        demographic_translation[demographic_type]
+      else
+        fail "Unknown demographic identifier [#{demographic_type}]"
+      end
     end
 
     def extract_type_from_known_template_id(template_id)
@@ -614,25 +651,6 @@ module HQMF2
 
   # Handles performance of methods not tied to the data criteria's instance vairables
   class DataCriteriaMethods
-    def self.extract_definition_from_entry_type(entry_type)
-      case entry_type
-      when 'Problem', 'Problems'
-        'diagnosis'
-      when 'Encounter', 'Encounters'
-        'encounter'
-      when 'LabResults', 'Results'
-        'laboratory_test'
-      when 'Procedure', 'Procedures'
-        'procedure'
-      when 'Demographics'
-        definition_for_demographic
-      when 'Derived'
-        'derived'
-      else
-        fail "Unknown data criteria template identifier [#{entry_type}]"
-      end
-    end
-
     def self.extract_field_values(entry, negation)
       fields = {}
       # extract most fields which use the same structure
@@ -660,24 +678,6 @@ module HQMF2
       # grab the child element if we don't have a reference
       fields['FLFS'] = TypedReference.new(fulfills) if fulfills
       fields
-    end
-
-    # Return the definitino for a known subset of patient characteristics
-    def self.definition_for_demographic
-      demographic_type = attr_val('./cda:observationCriteria/cda:code/@code')
-      demographic_translation = {
-        '21112-8' => 'patient_characteristic_birthdate',
-        '424144002' => 'patient_characteristic_age',
-        '263495000' => 'patient_characteristic_gender',
-        '102902016' => 'patient_characteristic_languages',
-        '125680007' => 'patient_characteristic_marital_status',
-        '103579009' => 'patient_characteristic_race'
-      }
-      if demographic_translation[demographic_type]
-        demographic_translation[demographic_type]
-      else
-        fail "Unknown demographic identifier [#{demographic_type}]"
-      end
     end
 
     def self.extract_description_for_variable(encoded_name)
