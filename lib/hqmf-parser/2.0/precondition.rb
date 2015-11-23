@@ -29,7 +29,7 @@ module HQMF2
     end
 
     # "False" aggregators exist, and require special handling, so this manages that and returns the
-    #  proper precondition.
+    #   proper precondition.
     def self.handle_aggregation(id_generator, reference, preconditions, aggregation, conjunction = nil)
       negation = false
       conjunction = aggregation.name

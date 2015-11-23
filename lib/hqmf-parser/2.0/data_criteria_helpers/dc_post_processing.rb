@@ -14,23 +14,11 @@ module HQMF2
       @source_data_criteria = strip_tokens(@source_data_criteria) unless @source_data_criteria.nil?
       @specific_occurrence_const = strip_tokens(@specific_occurrence_const) unless @specific_occurrence_const.nil?
       set_intersection
-      handle_specific_variables
+      handle_derived_specific_occurrences
     end
 
-    def handle_variable_subsets
-      is_grouper = @entry.at_xpath('./cda:grouperCriteria')
-      references = @entry.xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
-      reference = references.first
-      # Variables should now always handled as verbose
-      return unless references.try(:length) == 1
-      ref_id = strip_tokens("#{HQMF2::Utilities.attr_val(reference, 'cda:id/@extension')}_#{HQMF2::Utilities.attr_val(reference, 'cda:id/@root')}")
-      reference_criteria = @data_criteria_references[ref_id] if ref_id
-      return if is_grouper.nil? || !reference_criteria.try(:variable)
-      id_extension_xpath = './*/cda:id/@extension'
-      return unless (attr_val(id_extension_xpath) =~ /^occ[A-Z]of_qdm_var_/).nil?
-      @verbose_reference = true
-    end
-
+    # Extract the code_list_xpath from either the location related to the speicifc occurrence, or
+    #  from any of the template ids (if multiple exist)
     def set_code_list_path_and_result_value
       if @template_ids.empty? && @specific_occurrence
         template = @entry.document.at_xpath(
@@ -43,9 +31,11 @@ module HQMF2
       @template_ids.each do |t|
         mapping = ValueSetHelper.get_mapping_for_template(t)
         handle_mapping_template(mapping)
+        break if mapping # quit if one template id with a mapping has set these values
       end
     end
 
+    # Extract the value and code_list_xpath from the template mapping held in the ValueSetHelper class
     def handle_mapping_template(mapping)
       if mapping
         @code_list_xpath = mapping[:valueset_path] if mapping[:valueset_path] && @entry.at_xpath(mapping[:valueset_path])
@@ -53,6 +43,7 @@ module HQMF2
       end
     end
 
+    # Changes XPRODUCT data criteria that has an associated tempalte(s) to an INTERSETION criteria
     def set_intersection
       # Need to handle grouper criteria that do not have template ids -- these will be union of and intersection criteria
       return unless @template_ids.empty?
@@ -61,7 +52,8 @@ module HQMF2
       @description ||= (@derivation_operator == HQMF::DataCriteria::INTERSECT) ? 'Intersect' : 'Union'
     end
 
-    def handle_specific_variables
+    # Apply some elements from the reference_criteria to the derived specific occurrence
+    def handle_derived_specific_occurrences
       return unless @definition == 'derived'
       # Adds a child if none exists (specifically the source criteria)
       @children_criteria << @source_data_criteria if @children_criteria.empty?

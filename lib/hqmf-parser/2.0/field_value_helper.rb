@@ -38,6 +38,7 @@ module HQMF2
       end
     end
 
+    # The next groups of "parse_" handles extracting values for different types of criteria
     def self.parse_dset_cd(element, field, fields)
       if element
         item = element.at_xpath('./cda:item')
@@ -138,6 +139,7 @@ module HQMF2
       end
     end
 
+    # The "parse_"s after this point handle extraction of data criteria based on field names
     def self.parse_act_criteria_fields(_entry, _fields)
     end
 

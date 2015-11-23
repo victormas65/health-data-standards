@@ -30,6 +30,7 @@ module HQMF2
       end
     end
 
+    # Checks if one data criteria is covered by another (has all the appropriate elements of)
     def covered_criteria?(dc)
       base_criteria_defs = %w(patient_characteristic_ethnicity patient_characteristic_gender patient_characteristic_payer patient_characteristic_race)
       to_reject = true
@@ -60,6 +61,7 @@ module HQMF2
       base_checks && complex_coverage(data_criteria, check_criteria)
     end
 
+    # Check elements that need to not only exist, but need to be non-equal to other, potentially matchin, data criteria.
     def complex_coverage(data_criteria, check_criteria)
       same_value = data_criteria.value.nil? || data_criteria.value.try(:to_model).try(:to_json) == check_criteria.value.try(:to_model).try(:to_json)
       same_field_values = data_criteria.field_values.nil? || data_criteria.field_values.empty? ||

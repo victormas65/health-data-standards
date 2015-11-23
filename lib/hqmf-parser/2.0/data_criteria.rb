@@ -24,12 +24,11 @@ module HQMF2
       @variable = DataCriteriaMethods.extract_variable(@local_variable_name, @id)
       @field_values = DataCriteriaMethods.extract_field_values(@entry, @negation)
       @description = extract_description
-      handle_variable_subsets
       obtain_specific_and_source = SpecificOccurrenceAndSource.new(@entry, @id, @local_variable_name, @data_criteria_references, @occurrences_map)
       # Pulling these 5 variables out via destructing
       @source_data_criteria, @source_data_criteria_root, @source_data_criteria_extension,
         @specific_occurrence, @specific_occurrence_const = obtain_specific_and_source.extract_specific_and_source
-      extract_type_from_template_or_definition
+      extract_definition_from_template_or_type
       post_processing
     end
 
@@ -123,6 +122,9 @@ module HQMF2
 
     private
 
+    # Handles elments that only extract directly from the xml. Utilises the "BaseExtractions" class,
+    #  which holds a number of extractions that directly use the entry xml rather than implicitly
+    #  through the utilies module.
     def basic_setup
       @status = attr_val('./*/cda:statusCode/@code')
       @id_xpath = './*/cda:id/@extension'
@@ -141,6 +143,23 @@ module HQMF2
       @negation, @negation_code_list_id = simple_extractions.extract_negation
     end
 
+    # Extract the description, with some special handling if this is a variable; the MAT has added an encoded
+    # form of the variable name in the localVariableName field, if that's available use it; if not, fall back
+    # to the extension
+    def extract_description
+      if @variable
+        encoded_name = attr_val('./cda:localVariableName/@value')
+        encoded_name = DataCriteriaMethods.extract_description_for_variable(encoded_name) if encoded_name
+        return encoded_name if encoded_name.present?
+        attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
+      else
+        attr_val("./#{CRITERIA_GLOB}/cda:text/@value") ||
+          attr_val("./#{CRITERIA_GLOB}/cda:title/@value") ||
+          attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
+      end
+    end
+
+    # Extract the code system from the xml taht the document should use
     def inline_code_list
       code_system = attr_val("#{@code_list_xpath}/@codeSystem")
       if code_system
@@ -152,9 +171,13 @@ module HQMF2
       { code_system_name => [code_value] } if code_system_name && code_value
     end
 
+    # Handle elements that are marked as variable groupers that should not be turned into a "holding element"
+    #  (defined as a data criteria that encapsulates the calculation material in another element, and it itself groups them together)
     def handle_do_not_group
+      # If the first child is all the exists, and it ahs been marked as a "group" element, switch this over to map to the new element.
       if !@data_criteria_references["GROUP_#{@children_criteria.first}"].nil? && @children_criteria.length == 1
         @children_criteria[0] = "GROUP_#{@children_criteria.first}"
+      # If the group element is not found, extract the information from teh child and force it into the variable.
       elsif @children_criteria.length == 1 && @children_criteria.first.present?
         reference_criteria = @data_criteria_references[@children_criteria.first]
         return if reference_criteria.nil?
@@ -163,6 +186,8 @@ module HQMF2
       end
     end
 
+    # Duplicates information from a child element to this data criteria if none exits.
+    # If the duplication requires that come values should be overwritten, do so only in the function calling this.
     def duplicate_child_info(child_ref)
       @title ||= child_ref.title
       @type ||= child_ref.subset_operators
@@ -175,6 +200,7 @@ module HQMF2
       @value ||= child_ref.value
     end
 
+    # Generate the models of the field values
     def model_field_values
       field_values = {}
       @field_values.each_pair do |id, val|
@@ -195,6 +221,7 @@ module HQMF2
       return field_values unless field_values.empty?
     end
 
+    # Generate the title and description used when producing the model
     def handle_title_and_description
       # drop "* Value Set" from titles
       exact_desc = title.split(' ')[0...-3].join(' ')
@@ -207,26 +234,11 @@ module HQMF2
 
       @description = "#{@description}: #{exact_desc}"
     end
-
-    # Extract the description, with some special handling if this is a variable; the MAT has added an encoded
-    # form of the variable name in the localVariableName field, if that's available use it; if not, fall back
-    # to the extension
-    def extract_description
-      if @variable
-        encoded_name = attr_val('./cda:localVariableName/@value')
-        encoded_name = DataCriteriaMethods.extract_description_for_variable(encoded_name) if encoded_name
-        return encoded_name if encoded_name.present?
-        attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
-      else
-        attr_val("./#{CRITERIA_GLOB}/cda:text/@value") ||
-          attr_val("./#{CRITERIA_GLOB}/cda:title/@value") ||
-          attr_val("./#{CRITERIA_GLOB}/cda:id/@extension")
-      end
-    end
   end
 
-  # Handles performance of methods not tied to the data criteria's instance variables
+  # Holds methods not tied to the data criteria's instance variables
   class DataCriteriaMethods
+    #  Given an entry, and whether or not it's negated, extract out the proper field values for the data criteria.
     def self.extract_field_values(entry, negation)
       fields = {}
       # extract most fields which use the same structure
@@ -256,6 +268,7 @@ module HQMF2
       fields
     end
 
+    # Use the new MAT feature to extract the human generated (or computer generated) variable names from the xml.
     def self.extract_description_for_variable(encoded_name)
       if encoded_name.match(/^qdm_var_/)
         # Strip out initial qdm_var_ string, trailing _*, and possible occurrence reference
@@ -272,6 +285,7 @@ module HQMF2
       end
     end
 
+    # Parses the value for a given xpath
     def self.parse_value(node, xpath)
       value_def = node.at_xpath(xpath, HQMF2::Document::NAMESPACES)
       if value_def
@@ -281,6 +295,7 @@ module HQMF2
       end
     end
 
+    # Derives the type associated with a specific value
     def self.handle_value_type(value_type_def, value_def)
       value_type = value_type_def.value
       case value_type

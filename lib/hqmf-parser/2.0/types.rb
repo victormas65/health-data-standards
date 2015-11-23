@@ -37,9 +37,12 @@ module HQMF2
       # If the high and low value are at any time the same, then it must be an inclusive value.
       equivalent = attr_val('../cda:low/@value') == attr_val('../cda:high/@value')
 
+      # If and inclusivity value is set for any specific value, then mark the value as inclusive.
+      # IDEA: This could be limited in future iterations by including the parent type (temporal reference, subset code, etc.)
       inclusive_temporal_ref? || inclusive_length_of_stay? || inclusive_basic_values? || inclusive_subsets? || equivalent || @force_inclusive
     end
 
+    # Check whether the temporal reference should be marked as inclusive
     def inclusive_temporal_ref?
       # FIXME: NINF is used instead of 0 sometimes...? (not in the IG)
       # FIXME: Given nullFlavor, but IG uses it and nullValue everywhere...
@@ -51,6 +54,7 @@ module HQMF2
       (less_than_equal_tr || greater_than_equal_tr) && attr_val('../@lowClosed') == 'true'
     end
 
+    # Check whether the length of stay should be inclusive.
     def inclusive_length_of_stay?
       # lengthOfStay - EH111, EH108
       less_than_equal_los = attr_val('../cda:low/@nullFlavor') == 'NINF' &&
@@ -58,19 +62,20 @@ module HQMF2
 
       greater_than_equal_los = attr_val('../cda:high/@nullFlavor') == 'PINF' &&
                                attr_val('../@lowClosed') != 'false'
-      # Both less and gerater require that the tyep is PQ
+      # Both less and greater require that the type is PQ
       (less_than_equal_los || greater_than_equal_los) && attr_val('@xsi:type') == 'PQ'
     end
 
+    # Check is the basic values should be marked as inclusive, currently only checks for greater than case
     def inclusive_basic_values?
       # Basic values - EP65, EP9, and more
-      # Only checks for greater than case
       attr_val('../cda:high/@nullFlavor') == 'PINF' &&
         attr_val('../cda:low/@value') &&
         attr_val('../@lowClosed') != 'false' &&
         attr_val('../@xsi:type') == 'IVL_PQ'
     end
 
+    # Check if subset values should be marked as inclusive.  Currently only handles greater than or equal to
     def inclusive_subsets?
       # subset - EP128, EH108
       attr_val('../cda:low/@value') != '0' &&
@@ -131,24 +136,29 @@ module HQMF2
       end
 
       if generate_any_value?(lm, hm)
+        # Generate AnyValue if the only elements in the range are AnyValues.
         HQMF::AnyValue.new
       elsif generate_value?(lm, hm)
+        # Generate a singel value if both low and high are the same
         HQMF::Value.new(lm.type, nil, lm.value, lm.inclusive?, lm.derived?, lm.expression)
       else
         HQMF::Range.new(model_type, lm, hm, wm)
       end
     end
 
+    # Check if are only AnyValue elements for low and high
     def generate_any_value?(lm, hm)
       (lm.nil? || lm.is_a?(HQMF::AnyValue)) && (hm.nil? || hm.is_a?(HQMF::AnyValue))
     end
 
+    # Check if the value for the range should actually produce a single value instead of a range (if low and high are the same)
     def generate_value?(lm, hm)
       !lm.nil? && lm.try(:value) == hm.try(:value) && lm.try(:unit).nil? && hm.try(:unit).nil?
     end
 
     private
 
+    # Either derives a value from a specific path or generates a new value (or returns nil if none found)
     def optional_value(xpath, type)
       value_def = @entry.at_xpath(xpath, HQMF2::Document::NAMESPACES)
       return unless value_def
@@ -161,6 +171,7 @@ module HQMF2
       end
     end
 
+    # Defines how the time based element should be described
     def default_element_name
       case type
       when 'IVL_PQ'
@@ -172,6 +183,7 @@ module HQMF2
       end
     end
 
+    # Sets up the default bound type as either time based or a physical quantity
     def default_bounds_type
       case type
       when 'IVL_TS'
@@ -182,7 +194,7 @@ module HQMF2
     end
   end
 
-  # Represents a HQMF effective time which is a specialization of a interval
+  # Represents an HQMF effective time which is a specialization of an interval
   class EffectiveTime < Range
     def initialize(entry)
       super
@@ -263,6 +275,8 @@ module HQMF2
       @value = HQMF2::Range.new(value_def, 'IVL_PQ') if value_def && !@value
     end
 
+    # Return the value definition (what to calculate it on) associated with this subset.
+    # Other values, such as type and value, may be modified depending on this value.
     def handle_value_definition
       value_def = @entry.at_xpath('./*/cda:repeatNumber', HQMF2::Document::NAMESPACES)
       unless value_def
@@ -285,6 +299,7 @@ module HQMF2
       value_def
     end
 
+    # Take a qdm type code to map it to a subset operator, or failing at finding that, return the given subset code.
     def translate_type(subset_code, qdm_subset_code)
       combined = "#{qdm_subset_code}:#{subset_code}"
       if QDM_TYPE_MAP[combined]
@@ -359,6 +374,7 @@ module HQMF2
       @verbose = verbose
     end
 
+    # Generate the reference for the typed reference to use
     def reference
       value = "#{attr_val('./@extension')}_#{attr_val('./@root')}"
       strip_tokens value
@@ -377,6 +393,7 @@ module HQMF2
       @entry = entry
     end
 
+    # Generates the id to use for a reference
     def id
       if @entry.is_a? String
         @entry
@@ -386,10 +403,6 @@ module HQMF2
         id = 'MeasurePeriod' if id.try(:start_with?, 'measureperiod')
         id
       end
-    end
-
-    def source_ref_id
-      attr_val('./@extension')
     end
 
     def to_model

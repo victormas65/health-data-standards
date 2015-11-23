@@ -13,6 +13,7 @@ module HQMF2
       @data_criteria_references = data_criteria_references
     end
 
+    # Retrieve the specific occurrence and source data criteria information (or just source if there is no specific)
     def extract_specific_and_source
       specific_def = @entry.at_xpath('./*/cda:outboundRelationship[@typeCode="OCCR"]', HQMF2::Document::NAMESPACES)
       source_def = @entry.at_xpath('./*/cda:outboundRelationship[cda:subsetCode/@code="SOURCE"]', HQMF2::Document::NAMESPACES)
@@ -39,7 +40,7 @@ module HQMF2
       elsif source_def
         extension = HQMF2::Utilities.attr_val(source_def, './cda:criteriaReference/cda:id/@extension')
         root = HQMF2::Utilities.attr_val(source_def, './cda:criteriaReference/cda:id/@root')
-        ["#{extension}_#{root}"] # return the soruce data criteria itself, the rest will be blank
+        ["#{extension}_#{root}", root, extension] # return the soruce data criteria itself, the rest will be blank
       end
     end
 
@@ -70,6 +71,8 @@ module HQMF2
       [source_data_criteria, source_data_criteria_root, source_data_criteria_extension, specific_occurrence, specific_occurrence_const]
     end
 
+    # Using the id, source data criteria id, and local variable name (and whether or not it's a variable),
+    #  extract the occurrence identifiter (if one exists).
     def obtain_occurrence_identifier(stripped_id, stripped_lvn, stripped_sdc, is_variable)
       if is_variable
         occurrence_lvn_regex = 'occ[A-Z]of_'
@@ -80,20 +83,19 @@ module HQMF2
         occurrence_lvn_regex = 'Occurrence[A-Z]of'
         occurrence_id_regex = 'Occurrence[A-Z]_'
         occ_index = 10
-      end
-      # TODO: What should happen is neither @id or @lvn has occurrence label?
-      # puts "Checking #{"#{occurrence_id_regex}#{stripped_sdc}"} against #{stripped_id}"
-      # puts "Checking #{"#{occurrence_lvn_regex}#{stripped_sdc}"} against #{stripped_lvn}"
-      if stripped_id.match(/^#{occurrence_id_regex}#{stripped_sdc}/)
-        return stripped_id[occ_index]
-      elsif stripped_lvn.match(/^#{occurrence_lvn_regex}#{stripped_sdc}/)
-        return stripped_lvn[occ_index]
-      end
 
-      stripped_sdc[occ_index] if stripped_sdc.match(
-        /(^#{occurrence_id_regex}| ^#{occurrence_id_regex}qdm_var_| ^#{occurrence_lvn_regex})| ^#{occurrence_lvn_regex}qdm_var_/)
+        if stripped_id.match(/^#{occurrence_id_regex}#{stripped_sdc}/)
+          return stripped_id[occ_index]
+        elsif stripped_lvn.match(/^#{occurrence_lvn_regex}#{stripped_sdc}/)
+          return stripped_lvn[occ_index]
+        end
+
+        stripped_sdc[occ_index] if stripped_sdc.match(
+          /(^#{occurrence_id_regex}| ^#{occurrence_id_regex}qdm_var_| ^#{occurrence_lvn_regex})| ^#{occurrence_lvn_regex}qdm_var_/)
+      end
     end
 
+    # If the occurrence is a variable, extract the occurrrence identifier (if present)
     def handle_occurrence_var(stripped_id, stripped_lvn, occurrence_id_regex, occurrence_lvn_regex, occ_index)
       # TODO: Handle specific occurrences of variables that don't self-reference?
       if stripped_id.match(/^#{occurrence_id_regex}qdm_var_/)

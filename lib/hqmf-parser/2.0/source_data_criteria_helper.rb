@@ -1,6 +1,7 @@
 module HQMF2
   # Generates the Source Data Criteria from the entries in the HQMF
   class SourceDataCriteriaHelper
+    # Generates an identifier based on teh leftover elements included in the source data criteria.
     def self.identifier(criteria)
       sha256 = ''
       sha256 << "#{criteria.code_list_id}:"
@@ -14,10 +15,12 @@ module HQMF2
       Digest::SHA256.hexdigest sha256
     end
 
+    # Rejects any derived elements as they should never be used as source.
     def self.should_reject(dc)
       dc.definition == 'derived'
     end
 
+    # Removes unnecessary elements from a data criteria to create a source data criteria
     def self.strip_non_sc_elements(dc)
       if [HQMF::DataCriteria::SATISFIES_ANY, HQMF::DataCriteria::SATISFIES_ALL].include? dc.definition
         dc.instance_variable_set(:@definition, 'derived')
@@ -32,6 +35,8 @@ module HQMF2
       dc
     end
 
+    # Creates a data criteria based on an entry xml, removes any unnecessary elements (for the source),
+    #  and adds a data criteria reference if none exist
     def self.as_source_data_criteria(entry, data_criteria_references = {}, occurrences_map = {})
       dc = DataCriteria.new(entry, data_criteria_references, occurrences_map)
       dc = SourceDataCriteriaHelper.strip_non_sc_elements(dc)
@@ -41,6 +46,9 @@ module HQMF2
       dc
     end
 
+    # Given a list of criteria obtained from the XML, generate most of the source data criteria (since no explicit sources are given).
+    # After generating the source data criteria, filter the list to not include repeated, unnecessary sources, but maintain and return
+    #  map of those that have been removed to those that they were replaced with.
     def self.get_source_data_criteria_list(full_criteria_list, data_criteria_references = {}, occurrences_map = {})
       # currently, this will erase the sources if the ids are the same, but will not correct references later on
       source_data_criteria = full_criteria_list.map do |entry|

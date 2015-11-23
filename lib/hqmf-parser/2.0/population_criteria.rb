@@ -73,6 +73,7 @@ module HQMF2
       dc
     end
 
+    # generates the value given in an expression based on the number of criteria it references.
     def parse_parts_to_dc(parts)
       case parts.length
       when 1

@@ -4,18 +4,61 @@ module HQMF2
     VARIABLE_TEMPLATE = '0.1.2.3.4.5.6.7.8.9.1'
     SATISFIES_ANY_TEMPLATE = '2.16.840.1.113883.10.20.28.3.108'
     SATISFIES_ALL_TEMPLATE = '2.16.840.1.113883.10.20.28.3.109'
-    def extract_type_from_template_or_definition
+    def extract_definition_from_template_or_type
       # Try to determine what kind of data criteria we are dealing with
       # First we look for a template id and if we find one just use the definition
       # status and negation associated with that
       # If no template id or not one we recognize then try to determine type from
       # the definition element
-      extract_type_from_definition unless extract_type_from_template_id
+      extract_definition_from_type unless extract_definition_from_template_id
     end
 
-    def extract_type_from_definition
-      # if we have a specific occurrence of a variable, pull attributes from the reference
-      extract_type_from_specific_variable if @variable && @specific_occurrence
+    #  Given a template id, derive (if available) the definition for the template.
+    #  The definitions are stored in hqmf-model/data_criteria.json.
+    def extract_definition_from_template_id
+      found = false
+
+      @template_ids.each do |template_id|
+        defs = HQMF::DataCriteria.definition_for_template_id(template_id, 'r2')
+        if defs
+          @definition = defs['definition']
+          @status = defs['status'].length > 0 ? defs['status'] : nil
+          found ||= true
+        else
+          found ||= handle_known_template_id(template_id)
+        end
+      end
+
+      found
+    end
+
+    # Given a template id, modify the variables inside this data criteria to reflect the template
+    def handle_known_template_id(template_id)
+      case template_id
+      when VARIABLE_TEMPLATE
+        @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
+        @definition ||= 'derived'
+        @variable = true
+        @negation = false
+      when SATISFIES_ANY_TEMPLATE
+        @definition = HQMF::DataCriteria::SATISFIES_ANY
+        @negation = false
+      when SATISFIES_ALL_TEMPLATE
+        @definition = HQMF::DataCriteria::SATISFIES_ALL
+        @derivation_operator = HQMF::DataCriteria::INTERSECT
+        @negation = false
+      else
+        return false
+      end
+      true
+    end
+
+    # Extract the definition (sometimes status, sometimes other elements) of the data criteria based on the type
+    def extract_definition_from_type
+      # If we have a specific occurrence of a variable, pull attributes from the reference.
+      # IDEA set this up to be called from dc_specific_and_source_extract, the number of
+      #  fields changed by handle_specific_variable_ref may pose an issue.
+      extract_information_for_specific_variable if @variable && @specific_occurrence
 
       if @entry.at_xpath('./cda:grouperCriteria')
         @definition ||= 'derived'
@@ -26,7 +69,8 @@ module HQMF2
       handle_entry_type(entry_type)
     end
 
-    def extract_type_from_specific_variable
+    # Extracts information from a reference for a specific
+    def extract_information_for_specific_variable
       reference = @entry.at_xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
       if reference
         ref_id = strip_tokens(
@@ -39,6 +83,7 @@ module HQMF2
       handle_specific_variable_ref(reference_criteria)
     end
 
+    # Apply additional information to a specific occurrence's elements from teh criteria it references.
     def handle_specific_variable_ref(reference_criteria)
       # if there are no referenced children, then it's a variable representing
       # a single data criteria, so just reference it
@@ -57,6 +102,8 @@ module HQMF2
       end
     end
 
+    # Generate the definition and/or status from teh entry type in most cases.
+    # If the entry type is nil, and the value is a specific occurrence, more parsing may be necessary.
     def handle_entry_type(entry_type)
       # settings is required to trigger exceptions, which set the definition
       HQMF::DataCriteria.get_settings_for_definition(entry_type, @status)
@@ -77,6 +124,8 @@ module HQMF2
       end
     end
 
+    # If there is no entry type, extract the entry type from what it references, and extract additional information for specific occurrences.
+    # If there are no outbound references, print an error and mark it as variable.
     def definition_for_nil_entry
       reference = @entry.at_xpath('./*/cda:outboundRelationship/cda:criteriaReference', HQMF2::Document::NAMESPACES)
       ref_id = nil
@@ -98,23 +147,7 @@ module HQMF2
       end
     end
 
-    def extract_type_from_template_id
-      found = false
-
-      @template_ids.each do |template_id|
-        defs = HQMF::DataCriteria.definition_for_template_id(template_id, 'r2')
-        if defs
-          @definition = defs['definition']
-          @status = defs['status'].length > 0 ? defs['status'] : nil
-          found ||= true
-        else
-          found ||= extract_type_from_known_template_id(template_id)
-        end
-      end
-
-      found
-    end
-
+    # Given an entry type (which describes teh criteria's purpose) return the appropriate defintino
     def extract_definition_from_entry_type(entry_type)
       case entry_type
       when 'Problem', 'Problems'
@@ -150,26 +183,6 @@ module HQMF2
       else
         fail "Unknown demographic identifier [#{demographic_type}]"
       end
-    end
-
-    def extract_type_from_known_template_id(template_id)
-      case template_id
-      when VARIABLE_TEMPLATE
-        @derivation_operator = HQMF::DataCriteria::INTERSECT if @derivation_operator == HQMF::DataCriteria::XPRODUCT
-        @definition ||= 'derived'
-        @variable = true
-        @negation = false
-      when SATISFIES_ANY_TEMPLATE
-        @definition = HQMF::DataCriteria::SATISFIES_ANY
-        @negation = false
-      when SATISFIES_ALL_TEMPLATE
-        @definition = HQMF::DataCriteria::SATISFIES_ALL
-        @derivation_operator = HQMF::DataCriteria::INTERSECT
-        @negation = false
-      else
-        return false
-      end
-      true
     end
   end
 end
