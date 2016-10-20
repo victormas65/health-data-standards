@@ -48,6 +48,13 @@ module HQMF
         HQMF2CQL::Document.new(xml_contents).to_model
       end
 
+      def self.valid?(xml_contents)
+        doc = HQMF2::Document.parse(xml_contents)
+        hqmf2 = !doc.at_xpath("/cda:QualityMeasureDocument/cda:typeId[@root='2.16.840.1.113883.1.3' and @extension='POQM_HD000001UV02']").nil?
+        cql = !doc.at_xpath("/cda:QualityMeasureDocument/cda:relatedDocument/cda:expressionDocument/cda:text[@mediaType='application/cql']").nil?
+        hqmf2 && cql
+      end
+
     end
 
     # HQMF v1 Parser for measures that use QDM for measure logic
