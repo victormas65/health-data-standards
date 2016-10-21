@@ -178,12 +178,15 @@ module HQMF2CQL
       extracted_data_criteria = []
       @doc.xpath('cda:QualityMeasureDocument/cda:component/cda:dataCriteriaSection/cda:entry', NAMESPACES).each do |entry|
         extracted_data_criteria << entry
-        @data_criteria << HQMF2::DataCriteria.new(entry)
+        dc = HQMF2::DataCriteria.new(entry) # Create new data criteria
+        sdc = dc.clone # Clone data criteria and make it a source
+        sdc.id += '_source'
+
+        # REVIEW: For HQMF + CQL, do we need both DC and SDC?
+        @data_criteria << dc
+        @source_data_criteria << sdc
       end
-      
-      # REVIEW: For HQMF + CQL, is there a difference between DC and SDC?
-      @source_data_criteria += @data_criteria
     end
-    
+
   end
 end

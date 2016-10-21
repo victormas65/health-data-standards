@@ -17,11 +17,11 @@ class HQMF2CQLTest < Minitest::Test
 
   Dir.glob(measure_files).each do |measure_filename|
     measure_name = File.basename(measure_filename, '.xml')
-    #if ["CMS50v4"].index(measure_name)
+    if ["2"].index(measure_name)
       define_method("test_#{measure_name}") do
         do_test(measure_filename, measure_name)
       end
-    #end
+    end
   end
 
   def do_test(measure_filename, measure_name)
