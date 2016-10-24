@@ -22,8 +22,8 @@ module HQMF2CQL
       extract_data_criteria
 
       # Extract the population criteria and population collections
-      #pop_helper = HQMF2::DocumentPopulationHelper.new(@entry, @doc, self, @id_generator, @reference_ids)
-      #@populations, @population_criteria = pop_helper.extract_populations_and_criteria
+      pop_helper = HQMF2::DocumentPopulationHelper.new(@entry, @doc, self, @id_generator, @reference_ids)
+      @populations, @population_criteria = pop_helper.extract_populations_and_criteria
     end
 
     # Get the title of the measure
@@ -99,6 +99,7 @@ module HQMF2CQL
       @doc = @entry = Document.parse(hqmf_contents)
       @data_criteria = []
       @source_data_criteria = []
+      @reference_ids = []
     end
 
     # Extracts measure attributes from the given HQMF document.
