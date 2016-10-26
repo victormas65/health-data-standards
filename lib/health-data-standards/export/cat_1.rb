@@ -12,7 +12,11 @@ module HealthDataStandards
       @@vs_map = nil
 
       def export(patient, measures, start_date, end_date, header=nil, qrda_version=nil, cms_compatibility=false)
-        # r2_compatibility is being set for backward compatibility, only used in original 'show' templates
+
+        if (qrda_version.nil?)
+          raise "No QRDA version provided"
+        end
+
         qrda_template = 'show'
         r2_compatibility = false
 
