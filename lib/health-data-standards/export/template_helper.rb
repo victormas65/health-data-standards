@@ -30,21 +30,20 @@ module HealthDataStandards
 
       # Returns the raw ERb for the template_name provided. This method will look in
       # template_directory/template_subdir/template_name.template_format.erb
-      def template(template_name, provided_qrda_version=nil)
-        cache_template(template_name, provided_qrda_version)
+      def template(template_name)
+        cache_template(template_name)
       end
 
       # Basically the same template, but prepends an underscore to the template name
       # to mimic the Rails convention for template fragments
-      def partial(partial_name, provided_qrda_version=nil)
-        cache_template("_#{partial_name}", provided_qrda_version)
+      def partial(partial_name)
+        cache_template("_#{partial_name}")
       end
 
       protected 
 
-      def cache_template(template_name, provided_qrda_version=nil)
+      def cache_template(template_name)
         subdir = @qrda_version
-        subdir = provided_qrda_version if provided_qrda_version
         
         entry = @template_cache[template_name] || {mtime:-1, erb:nil}
         template_dir = template_root

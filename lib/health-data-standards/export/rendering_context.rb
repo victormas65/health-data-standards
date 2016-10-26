@@ -29,9 +29,9 @@ module HealthDataStandards
         erb = nil
         ident = nil
         if params[:template]
-          erb = @template_helper.template(params[:template], params[:qrda_version])
+          erb = @template_helper.template(params[:template])
         elsif params[:partial]
-          erb = @template_helper.partial(params[:partial], params[:qrda_version])
+          erb = @template_helper.partial(params[:partial])
           if params[:collection] 
             ident = params[:id] || params[:partial]
           end
