@@ -36,8 +36,7 @@ require_relative 'hqmf-parser/2.0/data_criteria'
 require_relative 'hqmf-parser/2.0/population_criteria'
 require_relative 'hqmf-parser/2.0/precondition'
 
-require_relative 'hqmf-parser/cql/utilities'
-require_relative 'hqmf-parser/cql/attribute_helper'
+require_relative 'hqmf-parser/cql/population_helper'
 require_relative 'hqmf-parser/cql/document'
 
 require_relative 'hqmf-model/data_criteria.rb'
