@@ -11,10 +11,11 @@ module HealthDataStandards
 
       @@vs_map = nil
 
-      def export(patient, measures, start_date, end_date, header=nil, qrda_version=nil, cms_compatibility=false)
+      #default qrda_version should default to latest version
+      def export(patient, measures, start_date, end_date, header=nil, qrda_version=3_1, cms_compatibility=false)
 
-        if (qrda_version.nil?)
-          raise "No QRDA version provided"
+        if (!["r2", "r3", "r3_1"].include? qrda_version)
+          raise "Unknown QRDA version provided"
         end
 
         qrda_template = 'show'
