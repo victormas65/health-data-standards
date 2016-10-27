@@ -12,17 +12,10 @@
   <observation classCode="OBS" moodCode="EVN">
     <templateId root="2.16.840.1.113883.10.20.24.3.88" extension="2014-12-01"/>
     <id root="1.3.6.1.4.1.115" extension="<%= identifier_for([reason, entry.start_time]) %>" />
-    <% if !r2_compatibility %>
     <code code="77301-0"
           codeSystem="2.16.840.1.113883.6.1"
           displayName="reason"
           codeSystemName="LOINC"/>
-    <% else %>
-    <code code="410666004"
-          codeSystem="2.16.840.1.113883.6.96"
-          displayName="reason"
-          codeSystemName="SNOMED CT"/>
-    <% end %>
     <statusCode code="completed"/>
       <effectiveTime>
         <low <%= value_or_null_flavor(entry.start_time) %>/>
