@@ -1,5 +1,5 @@
 module HQMF2CQL
-  
+
   # Class representing a HQMF v2 document that uses CQL for measure logic.
   class Document < HQMF2::Document
 
@@ -64,7 +64,7 @@ module HQMF2CQL
           criteria_def = population_def.at_xpath("cda:#{criteria_element_name}", HQMF2::Document::NAMESPACES)
           if criteria_def
             cql_statement = criteria_def.at_xpath("*/*/cda:id", HQMF2::Document::NAMESPACES).attribute('extension').to_s.match(/"([^"]*)"/)
-            @populations_cql_map[criteria_id] = cql_statement.to_s
+            @populations_cql_map[criteria_id] = cql_statement.to_s.delete('\\"')
           end
         end
       end
