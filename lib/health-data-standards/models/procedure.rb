@@ -14,10 +14,11 @@ class Procedure < Entry
 
   field :radiation_dose,      type: Hash 
   field :radiation_duration,  type: Hash
-
   # QDM 5.0 addition to Diagnostic Study, Performed
   field :result_date_time,    type: Integer
-
+  # Component attribute is for Diagnostic, Performed which is classified as a procedure
+  field :components,           type: Array, default: []
+ 
   embeds_one :facility
 
   belongs_to :performer, class_name: "Provider"
